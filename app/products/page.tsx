@@ -77,8 +77,12 @@ function ProductsContent() {
         ]);
 
         setDivisions(divData);
-        // Products API returns { products: [], pagination: {} }
-        setProducts(prodData.products || (Array.isArray(prodData) ? prodData : []));
+        const rawProducts = prodData.products || (Array.isArray(prodData) ? prodData : []);
+        const productsWithIds = rawProducts.map((product: any) => ({
+          ...product,
+          id: product._id || product.id,
+        }));
+        setProducts(productsWithIds);
       } catch (error: any) {
         console.error('Error loading data:', error);
         setError('Unable to load products right now. Please try again shortly.');

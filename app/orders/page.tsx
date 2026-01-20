@@ -41,7 +41,14 @@ export default function OrdersPage() {
         if (!response.ok) throw new Error('Failed to fetch orders');
 
         const ordersData = await response.json();
-        setOrders(ordersData || []);
+
+        // Ensure id exists for every order
+        const mappedOrders = (ordersData || []).map((order: any) => ({
+          ...order,
+          id: order.id || order._id || '',
+        }));
+
+        setOrders(mappedOrders);
       } catch (error) {
         console.error('Error fetching orders:', error);
       } finally {

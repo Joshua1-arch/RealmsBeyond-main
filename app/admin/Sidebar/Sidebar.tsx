@@ -12,7 +12,7 @@ const Sidebar = () => {
     { name: "Manage Goods", href: "/admin/goods", icon: <MdInventory className="w-5 h-5" /> },
     { name: "Orders", href: "/admin/orders", icon: <MdShoppingCart className="w-5 h-5" /> },
     { name: "Users", href: "/admin/users", icon: <MdPeople className="w-5 h-5" /> },
-    { name: "Blog", href: "/admin/Blog", icon: <MdEdit className="w-5 h-5"/> },
+    { name: "Blog", href: "/admin/Blog", icon: <MdEdit className="w-5 h-5" /> },
     { name: "Settings", href: "/admin/settings", icon: <MdSettings className="w-5 h-5" /> },
   ];
 
@@ -26,13 +26,12 @@ const Sidebar = () => {
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                isActive
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-200 hover:text-white hover:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-              }`}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${isActive
+                ? "bg-blue-600 text-white"
+                : "text-gray-200 hover:text-white hover:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                }`}
             >
-             
+
               {item.icon}
               {item.name}
             </Link>

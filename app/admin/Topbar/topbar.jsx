@@ -43,11 +43,10 @@ export default function Topbar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-body transition-all duration-200 ${
-                  isActive
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-body transition-all duration-200 ${isActive
                     ? "bg-white/20 text-white shadow-sm"
                     : "text-white/70 hover:text-white hover:bg-white/10"
-                }`}
+                  }`}
               >
                 {item.icon}
                 {item.name}

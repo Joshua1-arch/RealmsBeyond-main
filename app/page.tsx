@@ -30,21 +30,21 @@ async function getDivisions() {
 
 export default async function Home() {
   const dbDivisions = await getDivisions();
-  
+
   // Merge or fallback to static if DB is empty
   const displayDivisions = dbDivisions.length > 0 ? dbDivisions.map((d: any) => ({
     id: d._id,
     name: d.name,
     description: d.description,
-    href: `/divisions/${d.slug}`,
+    href: '/divisions',
     Icon: iconMap[d.slug] || FaBriefcase
   })) : [
-    { id: 1, name: 'Fashion & Beauty', Icon: FaShoppingBag, description: 'Premium fashion and beauty products including bags, clothing, and accessories', href: '/divisions/fashion-beauty' },
-    { id: 2, name: 'Agriculture & Food', Icon: FaSeedling, description: 'Sustainable agriculture, crops, farms, and food logistics', href: '/divisions/agriculture-food' },
-    { id: 3, name: 'Technology & Digital Solutions', Icon: FaLaptopCode, description: 'Cutting-edge technology and digital transformation services', href: '/divisions/technology' },
-    { id: 4, name: 'Trade & Logistics', Icon: FaShippingFast, description: 'Global trade and efficient logistics solutions', href: '/divisions/trade-logistics' },
-    { id: 5, name: 'Business Consulting & Investments', Icon: FaBriefcase, description: 'Strategic business consulting and investment opportunities', href: '/divisions/business-consulting' },
-    { id: 6, name: 'Luxury Fragrance', Icon: FaPumpSoap, description: 'Exquisite perfumes, colognes, and ambient scents for every occasion', href: '/divisions/fragrance' },
+    { id: 1, name: 'Fashion & Beauty', Icon: FaShoppingBag, description: 'Premium fashion and beauty products including bags, clothing, and accessories', href: '/divisions' },
+    { id: 2, name: 'Agriculture & Food', Icon: FaSeedling, description: 'Sustainable agriculture, crops, farms, and food logistics', href: '/divisions' },
+    { id: 3, name: 'Technology & Digital Solutions', Icon: FaLaptopCode, description: 'Cutting-edge technology and digital transformation services', href: '/divisions' },
+    { id: 4, name: 'Trade & Logistics', Icon: FaShippingFast, description: 'Global trade and efficient logistics solutions', href: '/divisions' },
+    { id: 5, name: 'Business Consulting & Investments', Icon: FaBriefcase, description: 'Strategic business consulting and investment opportunities', href: '/divisions' },
+    { id: 6, name: 'Luxury Fragrance', Icon: FaPumpSoap, description: 'Exquisite perfumes, colognes, and ambient scents for every occasion', href: '/divisions' },
   ];
   return (
     <>
