@@ -13,6 +13,24 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Ensure trailing slash handling is consistent
+  trailingSlash: false,
+  // Enable automatic static optimization
+  experimental: {
+    optimizeCss: true,
+  },
+  // Vercel deployment optimizations
+  poweredByHeader: false,
+  compress: true,
+  // Ensure proper handling of dynamic routes
+  async rewrites() {
+    return [
+      {
+        source: '/blog/:slug',
+        destination: '/blog/:slug',
+      },
+    ];
+  },
 };
 
 export default nextConfig;

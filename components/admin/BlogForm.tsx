@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 // import { Input } from '@/components/ui/Input'; // Not used in dark mode admin
 import { AiOutlineLoading3Quarters, AiOutlineCloudUpload } from 'react-icons/ai';
 import { FiSave, FiArrowLeft, FiImage, FiX } from 'react-icons/fi';
+import slugify from 'slugify';
 
 interface BlogFormProps {
     initialData?: any;
@@ -51,14 +52,12 @@ export default function BlogForm({ initialData, isEditing = false }: BlogFormPro
 
     const [slugEdited, setSlugEdited] = useState(false);
 
-    const slugify = (text: string) => {
-        return text
-            .toString()
-            .toLowerCase()
-            .trim()
-            .replace(/\s+/g, '-')        // Replace spaces with -
-            .replace(/[^\w\-]+/g, '')    // Remove all non-word chars
-            .replace(/\-\-+/g, '-');     // Replace multiple - with single -
+    const generateSlug = (text: string) => {
+        return slugify(text, {
+            lower: true,
+            strict: true,
+            trim: true
+        });
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -69,7 +68,7 @@ export default function BlogForm({ initialData, isEditing = false }: BlogFormPro
 
             // Auto-generate slug from title if slug hasn't been manually edited
             if (name === 'title' && !slugEdited && !isEditing) {
-                newData.slug = slugify(value);
+                newData.slug = generateSlug(value);
             }
 
             return newData;
