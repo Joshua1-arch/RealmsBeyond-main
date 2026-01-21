@@ -34,6 +34,11 @@ export const metadata: Metadata = {
     title: "Beyond Realms LTD",
     description: "Transcending Boundaries. Building Realms.",
   },
+  icons: {
+    icon: '/Black.png',
+    shortcut: '/Black.png',
+    apple: '/Black.png',
+  },
 };
 
 export default function RootLayout({

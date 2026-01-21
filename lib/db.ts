@@ -24,7 +24,7 @@ async function dbConnect() {
 
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false,
+      bufferCommands: true,
       maxPoolSize: parseInt(process.env.MONGODB_MAX_POOL_SIZE || '10'),
       minPoolSize: parseInt(process.env.MONGODB_MIN_POOL_SIZE || '2'),
       socketTimeoutMS: 30000,
