@@ -8,6 +8,12 @@ import BlogList from '@/components/blog/BlogList';
 // Revalidate every 60 seconds (ISR)
 export const revalidate = 60;
 
+export const metadata = {
+  title: 'Blog | Beyond Realms',
+  description: 'Latest insights, news, and updates from Beyond Realms across our various divisions.',
+};
+
+
 export default async function BlogPage() {
   await dbConnect();
 

@@ -5,8 +5,10 @@ import { Section } from '@/components/ui/Section';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FaShoppingBag, FaSeedling, FaLaptopCode, FaShippingFast, FaBriefcase, FaPumpSoap } from 'react-icons/fa';
+import { FiArrowRight } from 'react-icons/fi';
 import dbConnect from '@/lib/db';
 import Division from '@/lib/models/Division';
+import BlogPostModel from '@/lib/models/BlogPost';
 
 const iconMap: Record<string, any> = {
   'fashion-beauty': FaShoppingBag,
@@ -28,8 +30,23 @@ async function getDivisions() {
   }
 }
 
+async function getLatestPosts() {
+  try {
+    await dbConnect();
+    const posts = await BlogPostModel.find({ published: true })
+      .sort({ published_at: -1 })
+      .limit(3)
+      .lean();
+    return JSON.parse(JSON.stringify(posts));
+  } catch (error) {
+    console.error('Error fetching latest posts:', error);
+    return [];
+  }
+}
+
 export default async function Home() {
   const dbDivisions = await getDivisions();
+  const latestPosts = await getLatestPosts();
 
   // Merge or fallback to static if DB is empty
   const displayDivisions = dbDivisions.length > 0 ? dbDivisions.map((d: any) => ({
@@ -121,6 +138,63 @@ export default async function Home() {
               <Button href="/divisions" variant="primary" size="lg">
                 Explore All Divisions
               </Button>
+            </div>
+          </div>
+        </Section>
+
+        {/* Latest News Section */}
+        <Section background="default" padding="lg">
+          <div className="container">
+            <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
+              <div>
+                <h2 className="font-heading text-3xl md:text-5xl font-normal text-rare-primary mb-4">
+                  Latest Insights
+                </h2>
+                <p className="font-body text-base md:text-lg text-rare-text-light max-w-2xl">
+                  News, updates, and thought leadership from across our divisions
+                </p>
+              </div>
+              <Button href="/blog" variant="outline">
+                View All Articles
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {latestPosts.length > 0 ? (
+                latestPosts.map((post: any) => (
+                  <Card key={post._id} hover padding="none" href={`/blog/${post.slug}`} className="h-full flex flex-col group">
+                    <div className="aspect-[16/10] bg-gray-100 relative overflow-hidden">
+                      {post.featured_image ? (
+                        <img src={post.featured_image} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      ) : (
+                        <div className="w-full h-full bg-rare-primary/5 flex items-center justify-center text-rare-primary/20">
+                          <span className="font-heading text-lg">No Image</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-6 flex flex-col flex-1">
+                      <div className="flex items-center gap-2 mb-3 text-xs text-rare-text-light uppercase tracking-wider font-medium">
+                        <span className="text-rare-primary">{post.category || 'News'}</span>
+                        <span>•</span>
+                        <span>{new Date(post.published_at || post.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <h3 className="font-heading text-xl font-bold text-rare-primary mb-3 line-clamp-2 group-hover:text-rare-accent transition-colors">
+                        {post.title}
+                      </h3>
+                      <p className="font-body text-sm text-rare-text-light mb-4 line-clamp-3">
+                        {post.excerpt}
+                      </p>
+                      <div className="mt-auto pt-4 border-t border-gray-100 flex items-center text-rare-primary text-sm font-medium group-hover:gap-2 transition-all">
+                        Read Article <FiArrowRight className="ml-1" />
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <div className="col-span-full text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                  <p className="text-gray-500 font-body">Our insights are coming soon. Stay tuned!</p>
+                </div>
+              )}
             </div>
           </div>
         </Section>

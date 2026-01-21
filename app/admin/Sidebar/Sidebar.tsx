@@ -12,7 +12,7 @@ const Sidebar = () => {
     { name: "Manage Goods", href: "/admin/goods", icon: <MdInventory className="w-5 h-5" /> },
     { name: "Orders", href: "/admin/orders", icon: <MdShoppingCart className="w-5 h-5" /> },
     { name: "Users", href: "/admin/users", icon: <MdPeople className="w-5 h-5" /> },
-    { name: "Blog", href: "/admin/Blog", icon: <MdEdit className="w-5 h-5" /> },
+    { name: "Blog", href: "/admin/blog", icon: <MdEdit className="w-5 h-5" /> },
     { name: "Settings", href: "/admin/settings", icon: <MdSettings className="w-5 h-5" /> },
   ];
 

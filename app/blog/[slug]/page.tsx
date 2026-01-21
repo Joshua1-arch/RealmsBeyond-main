@@ -8,6 +8,7 @@ import { Section } from '@/components/ui/Section';
 import { FiCalendar, FiUser, FiClock, FiArrowLeft } from 'react-icons/fi';
 import { MdLocalOffer as MdTag } from 'react-icons/md';
 import Link from 'next/link';
+import BlogPostHeader from '@/components/blog/BlogPostHeader';
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -50,54 +51,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             <main>
                 {/* Helper function to format date */}
                 {/* Simple inline Hero or specific design */}
-                <div className="relative pt-32 pb-16 md:pt-40 md:pb-24 overflow-hidden bg-rare-secondary-darker">
-                    {/* Background Image/Overlay */}
-                    {postData.featured_image && (
-                        <>
-                            <div className="absolute inset-0 z-0">
-                                <img src={postData.featured_image} alt="" className="w-full h-full object-cover opacity-30" />
-                            </div>
-                            <div className="absolute inset-0 z-0 bg-gradient-to-t from-rare-secondary-darker via-rare-secondary-darker/80 to-transparent"></div>
-                        </>
-                    )}
-
-                    <div className="container relative z-10 max-w-4xl mx-auto px-6">
-                        <Link href="/blog" className="inline-flex items-center gap-2 text-white/70 hover:text-white mb-8 transition-colors text-sm font-medium">
-                            <FiArrowLeft /> Back to Blog
-                        </Link>
-
-                        <div className="space-y-4">
-                            <span className="inline-block px-3 py-1 bg-rare-primary/90 text-white text-xs font-bold uppercase tracking-wider rounded-md">
-                                {postData.category || 'News'}
-                            </span>
-
-                            <h1 className="text-3xl md:text-5xl font-heading font-bold text-white leading-tight">
-                                {postData.title}
-                            </h1>
-
-                            <div className="flex flex-wrap items-center gap-6 text-white/70 text-sm pt-4">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                                        <FiUser className="w-4 h-4" />
-                                    </div>
-                                    <span>{postData.author}</span>
-                                </div>
-                                {postData.published_at && (
-                                    <div className="flex items-center gap-2">
-                                        <FiCalendar className="w-4 h-4" />
-                                        <span>{new Date(postData.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                                    </div>
-                                )}
-                                {/* 
-                <div className="flex items-center gap-2">
-                  <FiClock className="w-4 h-4" />
-                  <span>5 min read</span>
-                </div>
-                */}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <BlogPostHeader post={postData} />
 
                 <Section background="default" padding="lg">
                     <div className="container max-w-3xl mx-auto">

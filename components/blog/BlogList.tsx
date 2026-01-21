@@ -157,9 +157,19 @@ export default function BlogList({ initialPosts }: BlogListProps) {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
                             {filteredPosts.map((post) => (
                                 <Card key={post.id || post._id} hover padding="none">
-                                    <div className="aspect-video bg-gradient-to-br from-rare-accent/30 to-rare-primary/10 flex items-center justify-center relative overflow-hidden">
-                                        <div className="absolute inset-0 bg-gradient-to-br from-transparent to-rare-primary/10"></div>
-                                        <div className="w-full h-full bg-gradient-to-br from-rare-accent/20 to-rare-primary/5 relative z-10"></div>
+                                    <div className="aspect-video bg-gradient-to-br from-rare-accent/30 to-rare-primary/10 flex items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform duration-500">
+                                        {(post as any).featured_image ? (
+                                            <img
+                                                src={(post as any).featured_image}
+                                                alt={post.title}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full relative z-10">
+                                                <div className="absolute inset-0 bg-gradient-to-br from-transparent to-rare-primary/10"></div>
+                                                <div className="w-full h-full bg-gradient-to-br from-rare-accent/20 to-rare-primary/5"></div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="p-6">
                                         <div className="flex items-center gap-2 mb-3">

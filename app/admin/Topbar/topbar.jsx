@@ -14,7 +14,7 @@ export default function Topbar() {
     { name: "Goods", href: "/admin/goods", icon: <MdInventory className="w-4 h-4" /> },
     { name: "Orders", href: "/admin/orders", icon: <MdShoppingCart className="w-4 h-4" /> },
     { name: "Users", href: "/admin/users", icon: <MdPeople className="w-4 h-4" /> },
-    { name: "Blog", href: "/admin/Blog", icon: <MdEdit className="w-4 h-4" /> },
+    { name: "Blog", href: "/admin/blog", icon: <MdEdit className="w-4 h-4" /> },
     { name: "Settings", href: "/admin/settings", icon: <MdSettings className="w-4 h-4" /> },
   ];
 

@@ -171,18 +171,16 @@ export const Header: React.FC = () => {
 
           {/* Icons & Auth */}
           <div className="flex items-center space-x-4">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
+            <button
               onClick={() => setIsSearchOpen(true)}
-              className="p-2 hover:bg-rare-primary-light rounded-lg transition-colors group"
+              className="p-2 hover:bg-rare-primary-light rounded-lg transition-colors flex items-center justify-center"
               aria-label="Search"
             >
               <FiSearch
-                className={`h-5 w-5 transition-colors group-hover:text-rare-accent ${isScrolled ? 'text-white' : 'text-rare-primary'
+                className={`h-5 w-5 transition-colors ${isScrolled ? 'text-white' : 'text-rare-primary'
                   }`}
               />
-            </motion.button>
+            </button>
             <Link
               href="/cart"
               className="p-2 hover:bg-rare-primary-light rounded-lg transition-colors relative block"

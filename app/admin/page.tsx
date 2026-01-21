@@ -1,4 +1,5 @@
 import { EcommerceMetrics } from "@/components/ecommerce/EcommerceMetrics";
+import { RevenueChart } from "@/components/admin/dashboard/RevenueChart";
 import { RecentOrders } from "@/components/admin/dashboard/RecentOrders";
 import { StockStatus } from "@/components/admin/dashboard/StockStatus";
 import { RecentReviews } from "@/components/admin/dashboard/RecentReviews";
@@ -8,12 +9,12 @@ export default function AdminDashboard() {
     <div className="bg-gray-50 min-h-screen">
       <main className="p-6 lg:p-10">
         <div className="mx-auto space-y-8">
-          
+
           {/* Hero Section - UPDATED */}
           {/* 1. Background is now a soft solid color (rare-primary at 10% opacity) */}
           {/* 2. Text is Dark Gray/Black for perfect readability */}
           <div className="relative overflow-hidden rounded-3xl bg-rare-primary/10 border border-rare-primary/20 p-10 md:p-14">
-            
+
             <div className="relative z-10">
               <h2 className="font-heading text-4xl md:text-5xl font-bold mb-4 tracking-wide leading-tight text-gray-900">
                 Welcome back, <span className="text-rare-primary">Admin</span>
@@ -50,6 +51,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Column - Recent Orders */}
             <div className="lg:col-span-2 space-y-8">
+              <RevenueChart />
               <RecentOrders />
               <RecentReviews />
             </div>

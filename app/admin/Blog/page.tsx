@@ -85,7 +85,7 @@ export default function BlogListPage() {
             </div>
             <Link
               href="/admin/blog/create"
-              className="flex items-center gap-2 px-6 py-2.5 bg-rare-primary hover:bg-rare-primary/90 text-white rounded-xl transition-all shadow-lg hover:scale-105 active:scale-95 font-bold"
+              className="flex items-center gap-2 px-6 py-2.5 bg-rare-primary hover:bg-rare-primary/90 text-grey rounded-xl transition-all shadow-lg hover:scale-105 active:scale-95 font-bold"
             >
               <FiPlus className="w-5 h-5" />
               Create New
