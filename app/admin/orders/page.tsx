@@ -3,13 +3,16 @@ import OrdersContent from "@/app/admin/orders/OrdersContent";
 import Order from "@/lib/models/Order";
 import OrderItem from "@/lib/models/OrderItem";
 
+import dbConnect from "@/lib/db";
+
 export const dynamic = 'force-dynamic';
 
 export default async function OrdersPage() {
   try {
+    await dbConnect();
     // Fetch orders and their items
     const orders = await Order.find().sort({ created_at: -1 });
-    
+
     const ordersWithItems = await Promise.all(orders.map(async (order) => {
       const items = await OrderItem.find({ order_id: order._id });
       // Convert MongoDB objects to plain objects and map _id to id for frontend compatibility

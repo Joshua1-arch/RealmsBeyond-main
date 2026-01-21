@@ -396,8 +396,8 @@ export default function AdminProductsPage() {
                                                                         <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 uppercase tracking-wide" title="Has unsaved changes">Unsaved Changes</span>
                                                                     )}
                                                                 </div>
-                                                                {/* Quick Actions - Visible on Hover */}
-                                                                <div className="flex items-center gap-3 mt-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                {/* Quick Actions - Always Visible */}
+                                                                <div className="flex items-center gap-3 mt-1 text-xs">
                                                                     <Link href={`/admin/products/create?id=${product._id}`} className="text-rare-primary hover:underline font-medium">Edit</Link>
                                                                     <span className="text-gray-300">|</span>
                                                                     <button onClick={() => handleQuickEditClick(product)} className="text-rare-primary hover:underline">Quick Edit</button>

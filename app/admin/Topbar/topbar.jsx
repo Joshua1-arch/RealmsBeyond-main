@@ -28,7 +28,7 @@ export default function Topbar() {
     <header className="h-20 flex items-center justify-between px-8 shadow-lg bg-gradient-blue/90 backdrop-blur-md text-white border-b border-white/10 sticky top-0 z-50">
       {/* Left section: Brand */}
       <div className="flex items-center gap-8">
-        <Link href="/admin" className="flex items-center gap-2 group">
+        <Link href="/" className="flex items-center gap-2 group" title="Back to Home">
           <div className="p-1.5 bg-white/10 rounded-lg group-hover:bg-white/20 transition-all">
             <img src="/logo.png" alt="BeyondRealms" className="h-7 w-7 rounded-full" />
           </div>
@@ -44,8 +44,8 @@ export default function Topbar() {
                 key={item.name}
                 href={item.href}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-body transition-all duration-200 ${isActive
-                    ? "bg-white/20 text-white shadow-sm"
-                    : "text-white/70 hover:text-white hover:bg-white/10"
+                  ? "bg-white/20 text-white shadow-sm"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
                   }`}
               >
                 {item.icon}
@@ -58,6 +58,9 @@ export default function Topbar() {
 
       {/* Right section: Info */}
       <div className="flex items-center gap-8">
+        {/* View Live Site Button */}
+
+
         {/* Current time */}
         <div className="hidden md:flex flex-col items-end">
           <span className="text-[10px] uppercase tracking-widest text-white/50 font-body">System Time</span>

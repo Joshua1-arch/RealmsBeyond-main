@@ -2,7 +2,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MdDashboard, MdInventory, MdSettings, MdPeople, MdShoppingCart, MdEdit } from "react-icons/md";
+import { MdDashboard, MdInventory, MdSettings, MdPeople, MdShoppingCart, MdEdit, MdPublic } from "react-icons/md";
 
 const Sidebar = () => {
   const pathname = usePathname();
@@ -38,7 +38,18 @@ const Sidebar = () => {
           );
         })}
       </nav>
-    </aside>
+
+      <div className="mt-8 pt-8 border-t border-white/10">
+        <Link
+          href="/"
+          target="_blank"
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-200 hover:text-white hover:bg-white/10 transition"
+        >
+          <MdPublic className="w-5 h-5" />
+          View Live Site
+        </Link>
+      </div>
+    </aside >
   );
 };
 
