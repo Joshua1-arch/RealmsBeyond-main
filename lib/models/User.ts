@@ -12,6 +12,8 @@ export interface IUser extends Document {
   verification_token?: string;
   verification_token_expires?: Date;
   last_verification_sent_at?: Date;
+  password_reset_token?: string;
+  password_reset_expires?: Date;
   refresh_token?: string;
   created_at: Date;
   updated_at: Date;
@@ -30,6 +32,8 @@ const UserSchema: Schema = new Schema(
     verification_token: { type: String },
     verification_token_expires: { type: Date },
     last_verification_sent_at: { type: Date },
+    password_reset_token: { type: String },
+    password_reset_expires: { type: Date },
     refresh_token: { type: String },
   },
   {
