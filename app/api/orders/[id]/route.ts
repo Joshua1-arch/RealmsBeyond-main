@@ -72,7 +72,7 @@ export async function PATCH(
     }
 
     // Whitelist allowed fields - prevent manipulation of sensitive fields
-    const allowedFields = ['status', 'notes'];
+    const allowedFields = ['status', 'notes', 'tracking_number', 'courier_name', 'shipment_status'];
     const updateData: Record<string, any> = {};
 
     for (const field of allowedFields) {

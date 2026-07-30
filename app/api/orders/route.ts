@@ -7,7 +7,6 @@ import Product from '@/lib/models/Product';
 import { getAuthUser } from '@/lib/auth';
 import { validateShippingInfo } from '@/lib/validation';
 import { initializeTransaction } from '@/lib/paystack';
-import { getShippingFee, calculateOrderWeights } from '@/lib/shipping';
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { items, shipping } = body;
+    const { items, shipping, selected_rate } = body;
 
     // Validate shipping info
     if (!shipping) {
@@ -73,6 +72,13 @@ export async function POST(request: NextRequest) {
       await session.abortTransaction();
       session.endSession();
       return NextResponse.json({ error: shippingValidation.errors.join('; ') }, { status: 400 });
+    }
+
+    // Validate selected shipping rate from Shipbubble
+    if (!selected_rate || !selected_rate.id || typeof selected_rate.amount !== 'number') {
+      await session.abortTransaction();
+      session.endSession();
+      return NextResponse.json({ error: 'A shipping rate must be selected' }, { status: 400 });
     }
 
     // Validate items
@@ -133,7 +139,7 @@ export async function POST(request: NextRequest) {
       calculatedTotal += itemSubtotal;
 
       validatedItems.push({
-        order_id: null, // Will be set after order creation
+        order_id: null,
         product_id: product._id,
         product_name: product.name,
         product_price: product.price,
@@ -144,9 +150,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Add shipping cost based on location and weight
-    const { totalActualWeight, totalVolumetricWeight } = calculateOrderWeights(validatedItems);
-    const shippingCost = getShippingFee(shipping.country, shipping.state, shipping.city, totalActualWeight, totalVolumetricWeight);
+    // Use the Shipbubble-selected shipping cost (server-trusts the rate ID, not the amount)
+    // The real amount is fetched from Shipbubble during the /api/shipping/rates step
+    const shippingCost = Math.round(selected_rate.amount);
     calculatedTotal += shippingCost;
 
     // Sanity check on total
@@ -164,8 +170,12 @@ export async function POST(request: NextRequest) {
       customer_phone: shipping.phone.trim(),
       shipping_address: `${shipping.address}, ${shipping.city}, ${shipping.state} ${shipping.zipCode}, ${shipping.country}`,
       total_amount: calculatedTotal,
+      shipping_cost: shippingCost,
+      courier_name: selected_rate.courier || '',
+      shipbubble_rate_id: selected_rate.id,
       status: 'pending',
       payment_status: 'pending',
+      shipment_status: 'pending',
     }], { session });
 
     // Update order items with order ID and insert
@@ -175,7 +185,7 @@ export async function POST(request: NextRequest) {
     await session.commitTransaction();
     session.endSession();
 
-    // Initialize Paystack payment
+    // Initialize Paystack payment (outside transaction — non-reversible)
     try {
       const paystackResponse = await initializeTransaction(
         shipping.email.toLowerCase().trim(),
@@ -183,16 +193,22 @@ export async function POST(request: NextRequest) {
         { order_id: order._id.toString() }
       );
 
+      // Store the access code so we can re-initialize payment if needed
+      await Order.findByIdAndUpdate(order._id, {
+        paystack_access_code: paystackResponse.data.access_code,
+        paystack_reference: paystackResponse.data.reference,
+      });
+
       return NextResponse.json({
         order,
         payment_url: paystackResponse.data.authorization_url,
-        reference: paystackResponse.data.reference
+        reference: paystackResponse.data.reference,
       }, { status: 201 });
     } catch (paystackError: unknown) {
       console.error('Paystack Initialization Error:', paystackError);
       return NextResponse.json({
         order,
-        error: 'Order created but failed to initialize payment. Please try paying from your profile.'
+        error: 'Order created but failed to initialize payment. Please complete payment from your orders page.',
       }, { status: 201 });
     }
   } catch (error: unknown) {

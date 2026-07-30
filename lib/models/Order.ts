@@ -7,10 +7,20 @@ export interface IOrder extends Document {
   customer_phone?: string;
   shipping_address: string;
   total_amount: number;
+  shipping_cost: number;
   status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
   payment_method?: string;
   paystack_reference?: string;
+  paystack_access_code?: string;
+  paid_at?: Date;
+  // Shipbubble fields
+  courier_name?: string;
+  shipbubble_rate_id?: string;
+  shipbubble_shipment_id?: string;
+  tracking_number?: string;
+  shipment_status?: 'pending' | 'booked' | 'in_transit' | 'delivered' | 'failed';
+  shipment_booked_at?: Date;
   notes?: string;
   created_at: Date;
   updated_at: Date;
@@ -24,6 +34,7 @@ const OrderSchema: Schema = new Schema(
     customer_phone: { type: String },
     shipping_address: { type: String, required: true },
     total_amount: { type: Number, required: true },
+    shipping_cost: { type: Number, default: 0 },
     status: {
       type: String,
       enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
@@ -37,7 +48,20 @@ const OrderSchema: Schema = new Schema(
       index: true,
     },
     payment_method: { type: String },
-    paystack_reference: { type: String },
+    paystack_reference: { type: String, sparse: true },
+    paystack_access_code: { type: String },
+    paid_at: { type: Date },
+    // Shipbubble fields
+    courier_name: { type: String },
+    shipbubble_rate_id: { type: String },
+    shipbubble_shipment_id: { type: String, sparse: true },
+    tracking_number: { type: String, sparse: true },
+    shipment_status: {
+      type: String,
+      enum: ['pending', 'booked', 'in_transit', 'delivered', 'failed'],
+      default: 'pending',
+    },
+    shipment_booked_at: { type: Date },
     notes: { type: String },
   },
   {

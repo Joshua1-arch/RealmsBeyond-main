@@ -7,6 +7,8 @@ export interface IOrderItem extends Document {
   product_price: number;
   quantity: number;
   subtotal: number;
+  weight?: string;
+  dimensions?: string;
   created_at: Date;
 }
 
@@ -18,6 +20,8 @@ const OrderItemSchema: Schema = new Schema(
     product_price: { type: Number, required: true },
     quantity: { type: Number, required: true },
     subtotal: { type: Number, required: true },
+    weight: { type: String },
+    dimensions: { type: String },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: false },

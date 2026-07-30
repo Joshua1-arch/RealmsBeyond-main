@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/Button';
 export const revalidate = 60;
 
 // Generate static params for all products (SSG)
+
 export async function generateStaticParams() {
-  await dbConnect();
   try {
+    await dbConnect();
     const products = await ProductModel.find({}, 'slug _id').lean();
 
     const params = [];

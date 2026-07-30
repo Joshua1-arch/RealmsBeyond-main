@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
@@ -28,6 +29,7 @@ interface Product {
 }
 
 export default function ProductView({ product }: { product: Product }) {
+    const router = useRouter();
     const { addItem } = useCart();
     const [selectedImage, setSelectedImage] = useState(0);
     const [quantity, setQuantity] = useState(1);
@@ -218,7 +220,26 @@ export default function ProductView({ product }: { product: Product }) {
                                         <MdShare className="w-6 h-6 text-rare-primary" />
                                     </button>
                                 </div>
-                                <Button variant="outline" size="lg" fullWidth href="/checkout" className="relative z-30">
+                                <Button
+                                    variant="outline"
+                                    size="lg"
+                                    fullWidth
+                                    className="relative z-30"
+                                    onClick={() => {
+                                        for (let i = 0; i < quantity; i++) {
+                                            addItem({
+                                                id: product.id,
+                                                name: product.name,
+                                                price: product.price,
+                                                image: product.images?.[0],
+                                                slug: product.slug,
+                                                weight: product.weight,
+                                                dimensions: product.dimensions,
+                                            });
+                                        }
+                                        router.push('/checkout');
+                                    }}
+                                >
                                     Buy Now
                                 </Button>
                             </div>
