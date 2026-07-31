@@ -75,7 +75,8 @@ export interface ShipbubbleRatesResponse {
   status: boolean;
   message: string;
   data: {
-    rates: ShipbubbleRate[];
+    rates?: ShipbubbleRate[];
+    couriers?: any[];
   };
 }
 
@@ -226,7 +227,18 @@ export async function getShippingRates(
   });
 
   if (!response.status) throw new Error(response.message || 'Failed to fetch rates');
-  return response.data?.rates || (response as any).rates || [];
+
+  const rawRates = response.data?.couriers || response.data?.rates || (response as any).couriers || (response as any).rates || [];
+  
+  return rawRates.map((r: any) => ({
+    id: r.courier_id || r.rate_id || r.id,
+    courier: r.courier_name || r.courier || r.name || 'Courier',
+    courier_logo: r.courier_logo || r.logo || '',
+    service_type: r.service_type || r.category || 'Door Delivery',
+    estimated_days: typeof r.estimated_days === 'number' ? r.estimated_days : parseInt(r.delivery_eta || '3', 10) || 3,
+    amount: r.total || r.amount || r.price || 0,
+    currency: r.currency || 'NGN',
+  }));
 }
 
 // ─────────────────────────────────────────────
