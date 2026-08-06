@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
-import { getShippingRates } from '@/lib/sendbox';
+import { getMergedShippingRates } from '@/lib/shipping';
 
 /**
  * POST /api/shipping/rates
- * Body: { destination: SendboxAddress, items: CartItem[] }
- * Returns: array of courier rate options from Sendbox
+ * Body: { destination: UnifiedAddress, items: CartItem[] }
+ * Returns: array of courier rate options aggregated from Sendbox & Shipbubble
  */
 export async function POST(request: NextRequest) {
   try {
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No items provided' }, { status: 400 });
     }
 
-    const rates = await getShippingRates(destination, items);
+    const rates = await getMergedShippingRates(destination, items);
 
     if (!rates || rates.length === 0) {
       return NextResponse.json({ error: 'No shipping rates available for this address. Please check your address and try again.' }, { status: 422 });

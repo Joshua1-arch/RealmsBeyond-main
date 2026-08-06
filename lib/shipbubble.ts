@@ -1,354 +1,329 @@
-/**
- * Shipbubble API Client
- * Handles: rate fetching, shipment creation, shipment tracking
- * Docs: https://shipbubble.com/docs
- */
+import crypto from "crypto";
 
-const SHIPBUBBLE_API_KEY = process.env.SHIPBUBBLE_API_KEY || '';
-const SHIPBUBBLE_BASE_URL = process.env.SHIPBUBBLE_API_URL || 'https://sandbox.shipbubble.com/v1';
-const SENDER_ADDRESS_CODE = process.env.SHIPBUBBLE_SENDER_ADDRESS_CODE;
-
-if (!SHIPBUBBLE_API_KEY) {
-  console.warn('[Shipbubble] SHIPBUBBLE_API_KEY is not set');
-}
-
-async function shipbubbleFetch<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const url = `${SHIPBUBBLE_BASE_URL}${endpoint}`;
-  console.log(`[Shipbubble Request] ${options.method || 'GET'} ${url}`);
-  console.log(`[Shipbubble Body]`, options.body);
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${SHIPBUBBLE_API_KEY}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    console.error(`[Shipbubble Response Error ${res.status}]`, err);
-    throw new Error(`Shipbubble API error ${res.status}: ${err}`);
-  }
-
-  return res.json() as Promise<T>;
-}
-
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
-
-export interface ShipbubbleParcel {
-  name: string;       // e.g. "Order #abc"
-  weight: number;     // kg (actual weight)
-  length: number;     // cm
-  width: number;      // cm
-  height: number;     // cm
-  items_count: number;
-  description?: string;
-}
-
-export interface ShipbubbleAddress {
+export interface AddressInput {
   name: string;
-  email: string;
   phone: string;
+  email?: string;
   address: string;
   city: string;
   state: string;
-  country?: string;   // defaults to Nigeria
+  country?: string;
 }
 
 export interface ShipbubbleRate {
-  id: string;
-  courier: string;
-  courier_logo?: string;
-  service_type: string;
-  estimated_days: number;
-  amount: number;       // in Naira
-  currency: string;
+  courier_id: string;
+  courier_name: string;
+  courier_image?: string;
+  total_shipping_fee: number;
+  delivery_eta: string;
+  shipping_option_id: string;
+  ratings?: number;
+  votes?: number;
+  trackingLabel?: string;
 }
 
-export interface ShipbubbleRatesResponse {
-  status: boolean;
-  message: string;
-  data: {
-    rates?: ShipbubbleRate[];
-    couriers?: any[];
-  };
+export interface RequestRatesResponse {
+  success: boolean;
+  rates: ShipbubbleRate[];
+  message?: string;
 }
 
-export interface ShipbubbleShipment {
-  shipment_id: string;
-  tracking_number: string;
-  courier: string;
-  status: string;
-  label_url?: string;
-}
-
-export interface ShipbubbleShipmentResponse {
-  status: boolean;
-  message: string;
-  data: ShipbubbleShipment;
-}
-
-export interface ShipbubbleTrackingResponse {
-  status: boolean;
-  message: string;
-  data: {
-    status: string;
-    events: Array<{
-      timestamp: string;
-      description: string;
-      location?: string;
-    }>;
-  };
-}
-
-// ─────────────────────────────────────────────
-// Helper: parse weight string "1.5" → 1.5 (kg)
-// ─────────────────────────────────────────────
-function parseWeight(weightStr?: string): number {
-  const w = parseFloat(weightStr || '0.5');
-  return isNaN(w) || w <= 0 ? 0.5 : w;
-}
-
-// ─────────────────────────────────────────────
-// Helper: parse dimensions "LxWxH" → {l, w, h}
-// ─────────────────────────────────────────────
-function parseDimensions(dimStr?: string): { length: number; width: number; height: number } {
-  if (!dimStr) return { length: 20, width: 15, height: 10 };
-  const parts = dimStr.toLowerCase().split('x').map(p => parseFloat(p.trim()));
-  if (parts.length === 3 && !parts.some(isNaN)) {
-    return { length: parts[0], width: parts[1], height: parts[2] };
-  }
-  return { length: 20, width: 15, height: 10 };
-}
-
-// Default Store / Sender Pickup Address (Used if no SENDER_ADDRESS_CODE is set)
-const DEFAULT_SENDER_ADDRESS = {
-  name: process.env.STORE_NAME || 'Beyond Realms Store',
-  email: process.env.BREVO_SENDER_EMAIL || 'support@beyondrealmsltd.com',
-  phone: process.env.STORE_PHONE || '08030000000',
-  address: process.env.STORE_ADDRESS || '15 Admiralty Way, Lekki Phase 1',
-  city: process.env.STORE_CITY || 'Lekki',
-  state: process.env.STORE_STATE || 'Lagos',
-  country: 'Nigeria',
-};
-
-// ─────────────────────────────────────────────
-// Get available shipping rates
-// ─────────────────────────────────────────────
-export async function getShippingRates(
-  destination: ShipbubbleAddress,
-  items: Array<{ weight?: string; dimensions?: string; quantity: number; name: string }>
-): Promise<ShipbubbleRate[]> {
-  if (!SHIPBUBBLE_API_KEY) throw new Error('Shipbubble API key not configured');
-
-  // Aggregate total weight and largest dimensions for the parcel
-  let totalWeight = 0;
-  let maxLength = 0;
-  let maxWidth = 0;
-  let maxHeight = 0;
-  let totalItems = 0;
-
-  for (const item of items) {
-    const qty = item.quantity || 1;
-    const w = parseWeight(item.weight);
-    const dims = parseDimensions(item.dimensions);
-
-    totalWeight += w * qty;
-    totalItems += qty;
-    if (dims.length > maxLength) maxLength = dims.length;
-    if (dims.width > maxWidth) maxWidth = dims.width;
-    if (dims.height > maxHeight) maxHeight = dims.height;
+export class ShipbubbleService {
+  private static getHeaders() {
+    const apiKey = process.env.SHIPBUBBLE_API_KEY;
+    if (!apiKey) {
+      console.warn("SHIPBUBBLE_API_KEY is not set in environment variables.");
+    }
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey || ""}`,
+    };
   }
 
-  // Ensure minimums
-  if (totalWeight < 0.5) totalWeight = 0.5;
-  if (maxLength < 1) maxLength = 20;
-  if (maxWidth < 1) maxWidth = 15;
-  if (maxHeight < 1) maxHeight = 10;
-
-  const isRealSenderCode = SENDER_ADDRESS_CODE && !SENDER_ADDRESS_CODE.includes('your_sender_address');
-  const senderPayload = isRealSenderCode
-    ? { sender_address_code: SENDER_ADDRESS_CODE }
-    : { sender_address: DEFAULT_SENDER_ADDRESS };
-
-  const body = {
-    ...senderPayload,
-    reciever_details: {
-      name: destination.name,
-      email: destination.email,
-      phone: destination.phone,
-      address: destination.address,
-      state: destination.state,
-      city: destination.city,
-      country: destination.country || 'Nigeria',
-    },
-    receiver_address: {
-      name: destination.name,
-      email: destination.email,
-      phone: destination.phone,
-      address: destination.address,
-      state: destination.state,
-      city: destination.city,
-      country: destination.country || 'Nigeria',
-    },
-    package_items: [
-      {
-        name: 'Order items',
-        weight: totalWeight,
-        length: maxLength,
-        width: maxWidth,
-        height: maxHeight,
-        items_count: totalItems,
-      },
-    ],
-    parcels: [
-      {
-        name: 'Order items',
-        weight: totalWeight,
-        length: maxLength,
-        width: maxWidth,
-        height: maxHeight,
-        items_count: totalItems,
-      },
-    ],
-    service_type: 'delivery',
-    pickup_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  };
-
-  const response = await shipbubbleFetch<ShipbubbleRatesResponse>('/shipping/fetch-rates', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-
-  if (!response.status) throw new Error(response.message || 'Failed to fetch rates');
-
-  const rawRates = response.data?.couriers || response.data?.rates || (response as any).couriers || (response as any).rates || [];
-  
-  return rawRates.map((r: any) => ({
-    id: r.courier_id || r.rate_id || r.id,
-    courier: r.courier_name || r.courier || r.name || 'Courier',
-    courier_logo: r.courier_logo || r.logo || '',
-    service_type: r.service_type || r.category || 'Door Delivery',
-    estimated_days: typeof r.estimated_days === 'number' ? r.estimated_days : parseInt(r.delivery_eta || '3', 10) || 3,
-    amount: r.total || r.amount || r.price || 0,
-    currency: r.currency || 'NGN',
-  }));
-}
-
-// ─────────────────────────────────────────────
-// Book a shipment (called AFTER payment confirmed)
-// ─────────────────────────────────────────────
-export async function createShipment(params: {
-  rateId: string;
-  orderId: string;
-  destination: ShipbubbleAddress;
-  items: Array<{ weight?: string; dimensions?: string; quantity: number; name: string }>;
-}): Promise<ShipbubbleShipment> {
-  if (!SHIPBUBBLE_API_KEY) throw new Error('Shipbubble API key not configured');
-
-  let totalWeight = 0;
-  let maxLength = 0, maxWidth = 0, maxHeight = 0, totalItems = 0;
-
-  for (const item of params.items) {
-    const qty = item.quantity || 1;
-    const w = parseWeight(item.weight);
-    const dims = parseDimensions(item.dimensions);
-    totalWeight += w * qty;
-    totalItems += qty;
-    if (dims.length > maxLength) maxLength = dims.length;
-    if (dims.width > maxWidth) maxWidth = dims.width;
-    if (dims.height > maxHeight) maxHeight = dims.height;
+  private static getBaseUrl() {
+    const envUrl = process.env.SHIPBUBBLE_BASE_URL || process.env.SHIPBUBBLE_API_URL;
+    if (envUrl && !envUrl.includes("api-test")) {
+      return envUrl;
+    }
+    return "https://api.shipbubble.com/v1";
   }
 
-  if (totalWeight < 0.5) totalWeight = 0.5;
-  if (maxLength < 1) maxLength = 20;
-  if (maxWidth < 1) maxWidth = 15;
-  if (maxHeight < 1) maxHeight = 10;
+  /**
+   * Helper to validate addresses and retrieve the address code.
+   */
+  static async validateAddress(address: AddressInput): Promise<number | null> {
+    try {
+      const baseUrl = this.getBaseUrl();
+      const countryStr = address.country || "Nigeria";
 
-  const senderPayload = SENDER_ADDRESS_CODE
-    ? { sender_address_code: SENDER_ADDRESS_CODE }
-    : { sender_address: DEFAULT_SENDER_ADDRESS };
+      // Shipbubble requires a full name (2+ words, letters only, no numbers or symbols)
+      let cleanName = (address.name || "Customer User").replace(/[^a-zA-Z\s]/g, "").trim();
+      if (!cleanName.includes(" ")) {
+        cleanName = `${cleanName} User`;
+      }
 
-  const body = {
-    rate_id: params.rateId,
-    ...senderPayload,
-    reciever_details: {
-      name: params.destination.name,
-      email: params.destination.email,
-      phone: params.destination.phone,
-      address: params.destination.address,
-      state: params.destination.state,
-      city: params.destination.city,
-      country: params.destination.country || 'Nigeria',
-    },
-    receiver_address: {
-      name: params.destination.name,
-      email: params.destination.email,
-      phone: params.destination.phone,
-      address: params.destination.address,
-      state: params.destination.state,
-      city: params.destination.city,
-      country: params.destination.country || 'Nigeria',
-    },
-    package_items: [
-      {
-        name: `Order ${params.orderId}`,
-        weight: totalWeight,
-        length: maxLength,
-        width: maxWidth,
-        height: maxHeight,
-        items_count: totalItems,
-        description: `Beyond Realms Order #${params.orderId}`,
-      },
-    ],
-    service_type: 'delivery',
-    pickup_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  };
+      let addressString = address.address;
+      if (!addressString.toLowerCase().includes(countryStr.toLowerCase())) {
+        addressString = `${addressString}, ${address.city}, ${address.state}, ${countryStr}`;
+      }
 
-  const response = await shipbubbleFetch<ShipbubbleShipmentResponse>('/shipping/labels', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+      const response = await fetch(`${baseUrl}/shipping/address/validate`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          name: cleanName,
+          email: address.email || "customer@example.com",
+          phone: address.phone,
+          address: addressString,
+        }),
+      });
 
-  if (!response.status) throw new Error(response.message || 'Failed to create shipment');
-  return response.data;
-}
+      const json = await response.json();
+      console.log(`[Shipbubble Address Validate] (${addressString}):`, JSON.stringify(json));
 
-// ─────────────────────────────────────────────
-// Track a shipment
-// ─────────────────────────────────────────────
-export async function trackShipment(shipmentId: string): Promise<ShipbubbleTrackingResponse['data']> {
-  if (!SHIPBUBBLE_API_KEY) throw new Error('Shipbubble API key not configured');
+      if (json.status === "success" && json.data && json.data.address_code) {
+        return Number(json.data.address_code);
+      }
 
-  try {
-    const response = await shipbubbleFetch<ShipbubbleTrackingResponse>(
-      `/shipping/shipments/${shipmentId}/track`
+      return null;
+    } catch (error) {
+      console.error("Error validating address with Shipbubble:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Helper to get sender address code.
+   */
+  private static async getSenderAddressCode(): Promise<number> {
+    const senderIdEnv = process.env.SHIPBUBBLE_SENDER_ADDRESS_ID || process.env.SHIPBUBBLE_SENDER_ADDRESS_CODE;
+    if (senderIdEnv && /^\d+$/.test(senderIdEnv.trim())) {
+      return parseInt(senderIdEnv.trim(), 10);
+    }
+
+    console.warn(
+      "SHIPBUBBLE_SENDER_ADDRESS_ID is not configured. Validating store address..."
     );
-    if (response.status && response.data) return response.data;
-  } catch (err: any) {
-    console.warn('[Track Shipment] Sandbox live tracking fallback:', err.message);
+
+    const code = await this.validateAddress({
+      name: process.env.STORE_NAME || "Beyond Realms Store",
+      email: process.env.BREVO_SENDER_EMAIL || "support@beyondrealmsltd.com",
+      phone: process.env.STORE_PHONE || "08030000000",
+      address: process.env.STORE_ADDRESS || "Nos 8, Ademola Babalola idi-Igbabo",
+      city: process.env.STORE_CITY || "Ogbomoso",
+      state: process.env.STORE_STATE || "Oyo",
+      country: "Nigeria",
+    });
+
+    if (!code) {
+      throw new Error("Failed to validate store sender address. Check Shipbubble credentials and connectivity.");
+    }
+    return code;
   }
 
-  // Fallback realistic tracking response for sandbox testing
-  return {
-    status: 'In Transit',
-    events: [
-      {
-        timestamp: new Date().toISOString(),
-        description: 'Shipment label generated and courier dispatched for pickup',
-        location: 'Lagos Hub',
+  private static buildRatesPayload(
+    senderAddressCode: number,
+    receiverAddressCode: number,
+    items: Array<{ name: string; quantity: number; weight?: number; price?: number }>
+  ) {
+    return {
+      sender_address_code: senderAddressCode,
+      reciever_address_code: receiverAddressCode,
+      pickup_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+      category_id: 74794423, // Fashion wears / general merchandise
+      package_items: items.map(item => ({
+        name: item.name,
+        description: item.name,
+        quantity: item.quantity,
+        unit_amount: item.price ?? 2000,
+        unit_weight: item.weight || 0.5,
+      })),
+      package_dimension: {
+        length: 10,
+        width: 10,
+        height: 10,
       },
-      {
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        description: 'Order confirmed and ready for courier pickup',
-        location: 'Merchant Warehouse',
-      },
-    ],
-  };
+    };
+  }
+
+  /**
+   * Fetches real-time shipping rates from Shipbubble courier partners.
+   */
+  static async getShippingRates(
+    deliveryAddress: AddressInput,
+    items: Array<{ name: string; quantity: number; weight?: number; price?: number }>
+  ): Promise<RequestRatesResponse> {
+    try {
+      const baseUrl = this.getBaseUrl();
+      const senderAddressCode = await this.getSenderAddressCode();
+      const receiverAddressCode = await this.validateAddress(deliveryAddress);
+
+      if (!receiverAddressCode) {
+        return {
+          success: false,
+          rates: [],
+          message: "Could not validate delivery address. Please ensure street, city, state, and country are correct.",
+        };
+      }
+
+      const payload = this.buildRatesPayload(senderAddressCode, receiverAddressCode, items);
+
+      const response = await fetch(`${baseUrl}/shipping/fetch_rates`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify(payload),
+      });
+
+      const json = await response.json();
+      console.log("[Shipbubble Rates Response]:", JSON.stringify(json));
+
+      if (json.status !== "success" || !json.data || !json.data.couriers) {
+        return {
+          success: false,
+          rates: [],
+          message: json.message || "Failed to fetch rates from Shipbubble",
+        };
+      }
+
+      const rates: ShipbubbleRate[] = json.data.couriers.map((courier: any) => ({
+        courier_id: String(courier.courier_id || courier.service_code),
+        courier_name: courier.courier_name,
+        courier_image: courier.courier_image,
+        total_shipping_fee: Number(courier.total || courier.rate_card_amount || 0),
+        delivery_eta: courier.delivery_eta || "2-5 days",
+        shipping_option_id: String(courier.courier_id || courier.service_code),
+        ratings: typeof courier.ratings === 'number' ? courier.ratings : undefined,
+        votes: typeof courier.votes === 'number' ? courier.votes : undefined,
+        trackingLabel: courier.tracking?.label || undefined,
+      }));
+
+      return {
+        success: true,
+        rates,
+      };
+    } catch (error: any) {
+      console.error("Error getting Shipbubble rates:", error);
+      return {
+        success: false,
+        rates: [],
+        message: error.message || "An unexpected error occurred while fetching shipping rates",
+      };
+    }
+  }
+
+  /**
+   * Books a shipment / creates an order in Shipbubble.
+   */
+  static async createShipment(
+    orderNumber: string,
+    deliveryAddress: AddressInput,
+    shippingOptionId: string,
+    items: Array<{ name: string; quantity: number; weight?: number; price?: number }>
+  ): Promise<{ success: boolean; shipmentId?: string; trackingCode?: string; message?: string }> {
+    try {
+      const baseUrl = this.getBaseUrl();
+      const senderAddressCode = await this.getSenderAddressCode();
+      const receiverAddressCode = await this.validateAddress(deliveryAddress);
+
+      if (!receiverAddressCode) {
+        throw new Error("Could not validate delivery address for shipment creation.");
+      }
+
+      const payload = this.buildRatesPayload(senderAddressCode, receiverAddressCode, items);
+
+      const ratesResponse = await fetch(`${baseUrl}/shipping/fetch_rates`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify(payload),
+      });
+
+      if (!ratesResponse.ok) {
+        const errorText = await ratesResponse.text();
+        throw new Error(`Failed to retrieve rate token for booking: ${errorText}`);
+      }
+
+      const ratesJson = await ratesResponse.json();
+      if (ratesJson.status !== "success" || !ratesJson.data || !ratesJson.data.request_token) {
+        throw new Error("Invalid rate token response from Shipbubble");
+      }
+
+      const requestToken = ratesJson.data.request_token;
+
+      const courier = ratesJson.data.couriers.find(
+        (c: any) => String(c.courier_id) === shippingOptionId
+      ) ?? ratesJson.data.couriers.find(
+        (c: any) => String(c.service_code) === shippingOptionId
+      );
+
+      if (!courier) {
+        return {
+          success: false,
+          message: "Selected shipping option is no longer available — please refresh shipping rates and try again.",
+        };
+      }
+
+      const response = await fetch(`${baseUrl}/shipping/labels`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          request_token: requestToken,
+          service_code: courier.service_code,
+          courier_id: courier.courier_id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Shipbubble create shipment label failed:", errorText);
+        throw new Error(`Shipbubble API error: ${response.statusText}`);
+      }
+
+      const json = await response.json();
+
+      if (json.status !== "success" || !json.data) {
+        return {
+          success: false,
+          message: json.message || "Failed to book shipment in Shipbubble",
+        };
+      }
+
+      return {
+        success: true,
+        shipmentId: json.data.order_id,
+        trackingCode: json.data.order_id,
+      };
+    } catch (error: any) {
+      console.error("Error creating Shipbubble shipment:", error);
+      return {
+        success: false,
+        message: error.message || "An unexpected error occurred while booking the shipment",
+      };
+    }
+  }
+
+  /**
+   * Securely verifies if a webhook request actually came from Shipbubble.
+   */
+  static verifyWebhookSignature(rawBodyString: string, signatureHeader: string): boolean {
+    try {
+      const secretKey = process.env.SHIPBUBBLE_WEBHOOK_SECRET || process.env.SHIPBUBBLE_API_KEY;
+      if (!secretKey) {
+        console.error("Shipbubble API Key / Webhook Secret is not defined. Cannot verify webhook signature.");
+        return false;
+      }
+
+      const expected = crypto
+        .createHmac("sha512", secretKey)
+        .update(rawBodyString)
+        .digest();
+
+      const provided = Buffer.from(signatureHeader, "hex");
+
+      if (provided.length !== expected.length) return false;
+      return crypto.timingSafeEqual(expected, provided);
+    } catch (error) {
+      console.error("Error verifying Shipbubble webhook signature:", error);
+      return false;
+    }
+  }
 }

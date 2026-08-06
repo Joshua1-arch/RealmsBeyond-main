@@ -6,6 +6,8 @@ export interface IOrder extends Document {
   customer_email: string;
   customer_phone?: string;
   shipping_address: string;
+  shipping_city?: string;
+  shipping_state?: string;
   total_amount: number;
   shipping_cost: number;
   status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
@@ -33,6 +35,8 @@ const OrderSchema: Schema = new Schema(
     customer_email: { type: String, required: true, index: true },
     customer_phone: { type: String },
     shipping_address: { type: String, required: true },
+    shipping_city: { type: String },
+    shipping_state: { type: String },
     total_amount: { type: Number, required: true },
     shipping_cost: { type: Number, default: 0 },
     status: {

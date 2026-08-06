@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
-import Order from '@/lib/models/Order';
+import Order, { IOrder } from '@/lib/models/Order';
 import OrderItem from '@/lib/models/OrderItem';
 import Product from '@/lib/models/Product';
 import { getAuthUser } from '@/lib/auth';
 import { validateShippingInfo } from '@/lib/validation';
 import { initializeTransaction } from '@/lib/paystack';
+import { getMergedShippingRates } from '@/lib/shipping';
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,14 +47,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  await dbConnect();
-  const session = await mongoose.startSession();
-  session.startTransaction();
   try {
+    await dbConnect();
     const user = await getAuthUser();
     if (!user) {
-      await session.abortTransaction();
-      session.endSession();
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -62,35 +59,25 @@ export async function POST(request: NextRequest) {
 
     // Validate shipping info
     if (!shipping) {
-      await session.abortTransaction();
-      session.endSession();
       return NextResponse.json({ error: 'Shipping information is required' }, { status: 400 });
     }
 
     const shippingValidation = validateShippingInfo(shipping);
     if (!shippingValidation.valid) {
-      await session.abortTransaction();
-      session.endSession();
       return NextResponse.json({ error: shippingValidation.errors.join('; ') }, { status: 400 });
     }
 
-    // Validate selected shipping rate from Sendbox
+    // Validate selected shipping rate structure
     if (!selected_rate || !selected_rate.id || typeof selected_rate.amount !== 'number') {
-      await session.abortTransaction();
-      session.endSession();
       return NextResponse.json({ error: 'A shipping rate must be selected' }, { status: 400 });
     }
 
     // Validate items
     if (!items || !Array.isArray(items) || items.length === 0) {
-      await session.abortTransaction();
-      session.endSession();
       return NextResponse.json({ error: 'Order must have at least one item' }, { status: 400 });
     }
 
     if (items.length > 100) {
-      await session.abortTransaction();
-      session.endSession();
       return NextResponse.json({ error: 'Too many items in order' }, { status: 400 });
     }
 
@@ -99,8 +86,6 @@ export async function POST(request: NextRequest) {
     const products = await Product.find({ _id: { $in: productIds }, in_stock: true }).lean();
 
     if (products.length !== items.length) {
-      await session.abortTransaction();
-      session.endSession();
       return NextResponse.json({ error: 'Some products are unavailable or out of stock' }, { status: 400 });
     }
 
@@ -123,15 +108,11 @@ export async function POST(request: NextRequest) {
     for (const item of items) {
       const product = productMap.get(item.id);
       if (!product) {
-        await session.abortTransaction();
-        session.endSession();
         return NextResponse.json({ error: `Product ${item.id} not found` }, { status: 400 });
       }
 
       const quantity = parseInt(item.quantity, 10);
       if (isNaN(quantity) || quantity < 1 || quantity > 100) {
-        await session.abortTransaction();
-        session.endSession();
         return NextResponse.json({ error: 'Invalid quantity for one or more items' }, { status: 400 });
       }
 
@@ -150,40 +131,90 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Use the Sendbox-selected shipping cost (server trusts the rate ID, not the client amount)
-    // The real amount is fetched from Sendbox during the /api/shipping/rates step
-    const shippingCost = Math.round(selected_rate.amount);
+    // Re-verify selected shipping rate server-side to prevent price tampering
+    let shippingCost = 0;
+    let matchedCourierName = selected_rate.courier || '';
+
+    try {
+      const liveRates = await getMergedShippingRates(
+        {
+          name: shipping.fullName.trim(),
+          email: shipping.email.toLowerCase().trim(),
+          phone: shipping.phone.trim(),
+          address: shipping.address.trim(),
+          city: shipping.city.trim(),
+          state: shipping.state.trim(),
+          country: shipping.country || 'Nigeria',
+        },
+        validatedItems.map((item) => ({
+          name: item.product_name,
+          quantity: item.quantity,
+          weight: parseFloat(item.weight || '0.5') || 0.5,
+          dimensions: item.dimensions,
+          price: item.product_price,
+        }))
+      );
+
+      const matchedRate = liveRates.find((r) => r.id === selected_rate.id);
+      if (!matchedRate) {
+        return NextResponse.json(
+          { error: 'Selected shipping rate is no longer available. Please refresh rates.' },
+          { status: 400 }
+        );
+      }
+
+      shippingCost = Math.round(matchedRate.amount);
+      matchedCourierName = matchedRate.courier;
+    } catch (rateErr) {
+      console.error('[Orders API] Live rate verification failed — rejecting order (fail-closed):', rateErr);
+      return NextResponse.json(
+        { error: 'Unable to verify shipping rate right now. Please try again.' },
+        { status: 503 }
+      );
+    }
+
     calculatedTotal += shippingCost;
 
     // Sanity check on total
     if (calculatedTotal <= 0 || calculatedTotal > 100000000) {
-      await session.abortTransaction();
-      session.endSession();
       return NextResponse.json({ error: 'Invalid order total' }, { status: 400 });
     }
 
-    // Create order within transaction
-    const [order] = await Order.create([{
-      user_id: user.userId,
-      customer_name: shipping.fullName.trim(),
-      customer_email: shipping.email.toLowerCase().trim(),
-      customer_phone: shipping.phone.trim(),
-      shipping_address: `${shipping.address}, ${shipping.city}, ${shipping.state} ${shipping.zipCode}, ${shipping.country}`,
-      total_amount: calculatedTotal,
-      shipping_cost: shippingCost,
-      courier_name: selected_rate.courier || '',
-      shipping_rate_id: selected_rate.id,
-      status: 'pending',
-      payment_status: 'pending',
-      shipment_status: 'pending',
-    }], { session });
+    // Start database transaction strictly for atomic document creation
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    // Update order items with order ID and insert
-    validatedItems.forEach(item => { item.order_id = order._id; });
-    await OrderItem.insertMany(validatedItems, { session });
+    let order: IOrder;
+    try {
+      [order] = await Order.create([{
+        user_id: user.userId,
+        customer_name: shipping.fullName.trim(),
+        customer_email: shipping.email.toLowerCase().trim(),
+        customer_phone: shipping.phone.trim(),
+        shipping_address: `${shipping.address}, ${shipping.city}, ${shipping.state} ${shipping.zipCode}, ${shipping.country}`,
+        shipping_city: shipping.city.trim(),
+        shipping_state: shipping.state.trim(),
+        total_amount: calculatedTotal,
+        shipping_cost: shippingCost,
+        courier_name: matchedCourierName || selected_rate.courier || '',
+        shipping_rate_id: selected_rate.id,
+        status: 'pending',
+        payment_status: 'pending',
+        shipment_status: 'pending',
+      }], { session });
 
-    await session.commitTransaction();
-    session.endSession();
+      validatedItems.forEach(item => { item.order_id = order._id; });
+      await OrderItem.insertMany(validatedItems, { session });
+
+      await session.commitTransaction();
+    } catch (dbErr) {
+      if (session.inTransaction()) {
+        await session.abortTransaction();
+      }
+      throw dbErr;
+    } finally {
+      session.endSession();
+    }
 
     // Initialize Paystack payment (outside transaction — non-reversible)
     try {
@@ -212,10 +243,6 @@ export async function POST(request: NextRequest) {
       }, { status: 201 });
     }
   } catch (error: unknown) {
-    if (session.inTransaction()) {
-      await session.abortTransaction();
-    }
-    session.endSession();
     console.error('[Orders API] POST Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

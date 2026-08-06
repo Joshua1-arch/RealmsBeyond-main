@@ -4,7 +4,7 @@ import Order from '@/lib/models/Order';
 import OrderItem from '@/lib/models/OrderItem';
 import { getAuthUser } from '@/lib/auth';
 import { verifyTransaction } from '@/lib/paystack';
-import { createShipment } from '@/lib/sendbox';
+import { createShipmentFromRate, UnifiedShippingRate } from '@/lib/shipping';
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,42 +48,61 @@ export async function POST(request: NextRequest) {
     order.paid_at = new Date();
     order.payment_method = verification.data.channel || 'card';
 
-    // Attempt automatic Sendbox booking if not booked yet
+    // Attempt automatic shipment booking if not booked yet
     if (order.shipping_rate_id && !order.tracking_number) {
       try {
         const orderItems = await OrderItem.find({ order_id: order._id });
-        const itemsForSendbox = orderItems.map((item) => ({
-          name: item.product_name,
-          quantity: item.quantity,
-          weight: item.weight || '0.5',
-          dimensions: item.dimensions || '20x15x10',
-        }));
+        const rateId = order.shipping_rate_id;
+        const provider = rateId.startsWith('shipbubble:') ? 'shipbubble' : 'sendbox';
 
-        const shipment = await createShipment({
-          rateId: order.shipping_rate_id,
-          orderId: order._id.toString(),
-          destination: {
+        const rateObj: UnifiedShippingRate = {
+          id: rateId,
+          provider: provider as 'sendbox' | 'shipbubble',
+          courier: order.courier_name || 'Courier',
+          service_type: 'Standard',
+          estimated_days: 3,
+          amount: order.shipping_cost,
+          currency: 'NGN',
+        };
+
+        if (!order.shipping_city) {
+          console.warn('[Verify Reference] Order missing explicit shipping_city, parsing address string:', order._id);
+        }
+
+        const bookingResult = await createShipmentFromRate(
+          rateObj,
+          order._id.toString(),
+          {
             name: order.customer_name,
             email: order.customer_email,
             phone: order.customer_phone || '08000000000',
             address: order.shipping_address,
-            city: order.shipping_city || 'Lagos',
-            state: order.shipping_state || 'Lagos',
+            city: order.shipping_city || order.shipping_address.split(',')[1]?.trim() || 'Lagos',
+            state: order.shipping_state || order.shipping_address.split(',')[2]?.trim()?.split(' ')[0] || 'Lagos',
             country: 'Nigeria',
           },
-          items: itemsForSendbox,
-        });
+          orderItems.map((item) => ({
+            name: item.product_name,
+            quantity: item.quantity,
+            weight: parseFloat(item.weight || '0.5') || 0.5,
+            dimensions: item.dimensions,
+            price: item.product_price,
+          }))
+        );
 
-        if (shipment) {
-          const s = shipment as any;
-          order.courier_name = s.courier_name || s.courier || order.courier_name;
-          order.tracking_number = s.tracking_number || s.shipment_id;
-          order.shipment_status = s.status || 'booked';
+        if (bookingResult.success && bookingResult.shipmentId) {
+          order.tracking_number = bookingResult.trackingCode || bookingResult.shipmentId;
+          order.shipment_status = 'booked';
           order.shipment_booked_at = new Date();
           order.status = 'shipped';
+        } else {
+          order.shipment_status = 'failed';
+          order.notes = `Shipment booking notice: ${bookingResult.message || 'Booking failed'}`;
         }
       } catch (shipErr: any) {
-        console.warn('[Verify Reference] Sendbox booking fallback notice:', shipErr.message);
+        console.warn('[Verify Reference] Shipment booking fallback notice:', shipErr.message);
+        order.shipment_status = 'failed';
+        order.notes = `Shipment booking exception: ${shipErr.message}`;
       }
     }
 

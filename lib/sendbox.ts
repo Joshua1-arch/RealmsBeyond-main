@@ -68,6 +68,14 @@ export interface SendboxAddress {
   country?: string;
 }
 
+export interface SendboxItemInput {
+  weight?: string;
+  dimensions?: string;
+  quantity: number;
+  name: string;
+  price?: number;
+}
+
 export interface ShippingRate {
   id: string;
   courier: string;

@@ -4,7 +4,7 @@ import dbConnect from '@/lib/db';
 import Order from '@/lib/models/Order';
 import OrderItem from '@/lib/models/OrderItem';
 import { verifyTransaction } from '@/lib/paystack';
-import { createShipment } from '@/lib/sendbox';
+import { createShipmentFromRate, UnifiedShippingRate } from '@/lib/shipping';
 import { sendEmail } from '@/lib/email';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
@@ -27,14 +27,17 @@ export async function POST(request: NextRequest) {
       .update(body)
       .digest('hex');
 
-    if (hash !== signature) {
+    const hashBuffer = Buffer.from(hash, 'hex');
+    const sigBuffer = Buffer.from(signature, 'hex');
+
+    if (hashBuffer.length !== sigBuffer.length || !crypto.timingSafeEqual(hashBuffer, sigBuffer)) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
     const event = JSON.parse(body);
 
     if (event.event === 'charge.success') {
-      const { reference, metadata, amount, channel } = event.data;
+      const { reference, metadata, channel } = event.data;
       const orderId = metadata?.order_id;
 
       if (!orderId) {
@@ -47,15 +50,14 @@ export async function POST(request: NextRequest) {
 
       await dbConnect();
 
-      // IDEMPOTENCY: Check if order already processed with this reference
       const existingOrder = await Order.findById(orderId);
       if (!existingOrder) {
         return NextResponse.json({ error: 'Order not found' }, { status: 404 });
       }
 
-      // Already processed - idempotent response
-      if (existingOrder.payment_status === 'paid' && existingOrder.paystack_reference === reference) {
-        return NextResponse.json({ received: true, message: 'Already processed' });
+      // Early idempotency check to avoid redundant Paystack API verification calls
+      if (existingOrder.payment_status === 'paid') {
+        return NextResponse.json({ received: true, message: 'Already processed' }, { status: 200 });
       }
 
       // Prevent processing if order is in a terminal state
@@ -110,53 +112,81 @@ export async function POST(request: NextRequest) {
       }
 
       // ──────────────────────────────────────────────────────
-      // Book Sendbox shipment AFTER payment confirmed
+      // Book shipment AFTER payment confirmed (Sendbox or Shipbubble)
       // ──────────────────────────────────────────────────────
       if (updatedOrder.shipping_rate_id) {
         try {
           const orderItems = await OrderItem.find({ order_id: orderId }).lean();
 
-          const shipment = await createShipment({
-            rateId: updatedOrder.shipping_rate_id,
-            orderId: orderId,
-            destination: {
+          const rateId = updatedOrder.shipping_rate_id;
+          const provider = rateId.startsWith('shipbubble:') ? 'shipbubble' : 'sendbox';
+
+          const rateObj: UnifiedShippingRate = {
+            id: rateId,
+            provider: provider as 'sendbox' | 'shipbubble',
+            courier: updatedOrder.courier_name || 'Courier',
+            service_type: 'Standard',
+            estimated_days: 3,
+            amount: updatedOrder.shipping_cost,
+            currency: 'NGN',
+          };
+
+          if (!updatedOrder.shipping_city) {
+            console.warn('[Webhook] Order missing explicit shipping_city, parsing address string:', orderId);
+          }
+
+          const bookingResult = await createShipmentFromRate(
+            rateObj,
+            orderId,
+            {
               name: updatedOrder.customer_name,
               email: updatedOrder.customer_email,
               phone: updatedOrder.customer_phone || '',
               address: updatedOrder.shipping_address,
-              city: updatedOrder.shipping_address.split(',')[1]?.trim() || '',
-              state: updatedOrder.shipping_address.split(',')[2]?.trim()?.split(' ')[0] || '',
+              city: updatedOrder.shipping_city || updatedOrder.shipping_address.split(',')[1]?.trim() || 'Lagos',
+              state: updatedOrder.shipping_state || updatedOrder.shipping_address.split(',')[2]?.trim()?.split(' ')[0] || 'Lagos',
               country: 'Nigeria',
             },
-            items: orderItems.map(i => ({
+            orderItems.map((i: any) => ({
               name: i.product_name,
-              weight: (i as any).weight,
-              dimensions: (i as any).dimensions,
+              weight: parseFloat(i.weight || '0.5') || 0.5,
+              dimensions: i.dimensions,
               quantity: i.quantity,
-            })),
-          });
-
-          await Order.findByIdAndUpdate(orderId, {
-            sendbox_shipment_id: shipment.shipment_id,
-            tracking_number: shipment.tracking_number,
-            shipment_status: 'booked',
-            shipment_booked_at: new Date(),
-            status: 'processing',
-          });
-
-          // Send tracking confirmation email
-          await sendOrderConfirmationEmail(
-            updatedOrder.customer_email,
-            updatedOrder.customer_name,
-            orderId,
-            updatedOrder.total_amount,
-            shipment.tracking_number,
-            updatedOrder.courier_name || shipment.courier
+              price: i.product_price,
+            }))
           );
-        } catch (shipErr) {
-          // Sendbox booking failed — log it but don't fail the webhook
-          // Admin will see shipment_status: 'pending' and can re-trigger manually
-          console.error('[Webhook] Sendbox booking failed for order', orderId, shipErr);
+
+          if (bookingResult.success && bookingResult.shipmentId) {
+            await Order.findByIdAndUpdate(orderId, {
+              sendbox_shipment_id: bookingResult.shipmentId,
+              tracking_number: bookingResult.trackingCode || bookingResult.shipmentId,
+              shipment_status: 'booked',
+              shipment_booked_at: new Date(),
+              status: 'processing',
+            });
+
+            // Send tracking confirmation email
+            await sendOrderConfirmationEmail(
+              updatedOrder.customer_email,
+              updatedOrder.customer_name,
+              orderId,
+              updatedOrder.total_amount,
+              bookingResult.trackingCode || bookingResult.shipmentId,
+              updatedOrder.courier_name || provider
+            );
+          } else {
+            console.error('[Webhook] Shipment booking returned failure for order', orderId, bookingResult.message);
+            await Order.findByIdAndUpdate(orderId, {
+              shipment_status: 'failed',
+              notes: `Shipment booking failed: ${bookingResult.message || 'Unknown error'}`,
+            });
+          }
+        } catch (shipErr: any) {
+          console.error('[Webhook] Shipment booking exception for order', orderId, shipErr);
+          await Order.findByIdAndUpdate(orderId, {
+            shipment_status: 'failed',
+            notes: `Shipment booking exception: ${shipErr.message || String(shipErr)}`,
+          });
         }
       } else {
         // No rate ID — send basic confirmation without tracking
