@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: shippingValidation.errors.join('; ') }, { status: 400 });
     }
 
-    // Validate selected shipping rate from Shipbubble
+    // Validate selected shipping rate from Sendbox
     if (!selected_rate || !selected_rate.id || typeof selected_rate.amount !== 'number') {
       await session.abortTransaction();
       session.endSession();
@@ -150,8 +150,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Use the Shipbubble-selected shipping cost (server-trusts the rate ID, not the amount)
-    // The real amount is fetched from Shipbubble during the /api/shipping/rates step
+    // Use the Sendbox-selected shipping cost (server trusts the rate ID, not the client amount)
+    // The real amount is fetched from Sendbox during the /api/shipping/rates step
     const shippingCost = Math.round(selected_rate.amount);
     calculatedTotal += shippingCost;
 
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
       total_amount: calculatedTotal,
       shipping_cost: shippingCost,
       courier_name: selected_rate.courier || '',
-      shipbubble_rate_id: selected_rate.id,
+      shipping_rate_id: selected_rate.id,
       status: 'pending',
       payment_status: 'pending',
       shipment_status: 'pending',

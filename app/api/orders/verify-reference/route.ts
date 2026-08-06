@@ -4,7 +4,7 @@ import Order from '@/lib/models/Order';
 import OrderItem from '@/lib/models/OrderItem';
 import { getAuthUser } from '@/lib/auth';
 import { verifyTransaction } from '@/lib/paystack';
-import { createShipment } from '@/lib/shipbubble';
+import { createShipment } from '@/lib/sendbox';
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,11 +48,11 @@ export async function POST(request: NextRequest) {
     order.paid_at = new Date();
     order.payment_method = verification.data.channel || 'card';
 
-    // Attempt automatic Shipbubble booking if not booked yet
+    // Attempt automatic Sendbox booking if not booked yet
     if (order.shipping_rate_id && !order.tracking_number) {
       try {
         const orderItems = await OrderItem.find({ order_id: order._id });
-        const itemsForShipbubble = orderItems.map((item) => ({
+        const itemsForSendbox = orderItems.map((item) => ({
           name: item.product_name,
           quantity: item.quantity,
           weight: item.weight || '0.5',
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
             state: order.shipping_state || 'Lagos',
             country: 'Nigeria',
           },
-          items: itemsForShipbubble,
+          items: itemsForSendbox,
         });
 
         if (shipment) {
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
           order.status = 'shipped';
         }
       } catch (shipErr: any) {
-        console.warn('[Verify Reference] Shipbubble booking fallback notice:', shipErr.message);
+        console.warn('[Verify Reference] Sendbox booking fallback notice:', shipErr.message);
       }
     }
 

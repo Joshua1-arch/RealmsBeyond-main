@@ -14,10 +14,10 @@ export interface IOrder extends Document {
   paystack_reference?: string;
   paystack_access_code?: string;
   paid_at?: Date;
-  // Shipbubble fields
+  // Shipping / Sendbox fields
   courier_name?: string;
-  shipbubble_rate_id?: string;
-  shipbubble_shipment_id?: string;
+  shipping_rate_id?: string;       // Rate ID from Sendbox delivery_quote
+  sendbox_shipment_id?: string;    // Shipment ID returned after booking
   tracking_number?: string;
   shipment_status?: 'pending' | 'booked' | 'in_transit' | 'delivered' | 'failed';
   shipment_booked_at?: Date;
@@ -51,10 +51,10 @@ const OrderSchema: Schema = new Schema(
     paystack_reference: { type: String, sparse: true },
     paystack_access_code: { type: String },
     paid_at: { type: Date },
-    // Shipbubble fields
+    // Shipping / Sendbox fields
     courier_name: { type: String },
-    shipbubble_rate_id: { type: String },
-    shipbubble_shipment_id: { type: String, sparse: true },
+    shipping_rate_id: { type: String },
+    sendbox_shipment_id: { type: String, sparse: true },
     tracking_number: { type: String, sparse: true },
     shipment_status: {
       type: String,

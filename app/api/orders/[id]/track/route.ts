@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Order from '@/lib/models/Order';
 import { getAuthUser } from '@/lib/auth';
-import { trackShipment } from '@/lib/shipbubble';
+import { trackShipment } from '@/lib/sendbox';
 
 /**
  * GET /api/orders/[id]/track
- * Returns live tracking data from Shipbubble.
+ * Returns live tracking data from Sendbox.
  */
 export async function GET(
   _request: NextRequest,
@@ -30,7 +30,7 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (!order.shipbubble_shipment_id) {
+    if (!order.sendbox_shipment_id) {
       return NextResponse.json({
         tracking_available: false,
         message: 'Shipment has not been booked yet',
@@ -38,7 +38,7 @@ export async function GET(
       });
     }
 
-    const trackingData = await trackShipment(order.shipbubble_shipment_id);
+    const trackingData = await trackShipment(order.sendbox_shipment_id);
 
     // Update the local shipment status if it changed
     if (trackingData.status && trackingData.status !== order.shipment_status) {

@@ -4,7 +4,7 @@ import dbConnect from '@/lib/db';
 import Order from '@/lib/models/Order';
 import OrderItem from '@/lib/models/OrderItem';
 import { verifyTransaction } from '@/lib/paystack';
-import { createShipment } from '@/lib/shipbubble';
+import { createShipment } from '@/lib/sendbox';
 import { sendEmail } from '@/lib/email';
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
@@ -110,14 +110,14 @@ export async function POST(request: NextRequest) {
       }
 
       // ──────────────────────────────────────────────────────
-      // Book Shipbubble shipment AFTER payment confirmed
+      // Book Sendbox shipment AFTER payment confirmed
       // ──────────────────────────────────────────────────────
-      if (updatedOrder.shipbubble_rate_id) {
+      if (updatedOrder.shipping_rate_id) {
         try {
           const orderItems = await OrderItem.find({ order_id: orderId }).lean();
 
           const shipment = await createShipment({
-            rateId: updatedOrder.shipbubble_rate_id,
+            rateId: updatedOrder.shipping_rate_id,
             orderId: orderId,
             destination: {
               name: updatedOrder.customer_name,
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
           });
 
           await Order.findByIdAndUpdate(orderId, {
-            shipbubble_shipment_id: shipment.shipment_id,
+            sendbox_shipment_id: shipment.shipment_id,
             tracking_number: shipment.tracking_number,
             shipment_status: 'booked',
             shipment_booked_at: new Date(),
@@ -154,9 +154,9 @@ export async function POST(request: NextRequest) {
             updatedOrder.courier_name || shipment.courier
           );
         } catch (shipErr) {
-          // Shipbubble booking failed — log it but don't fail the webhook
+          // Sendbox booking failed — log it but don't fail the webhook
           // Admin will see shipment_status: 'pending' and can re-trigger manually
-          console.error('[Webhook] Shipbubble booking failed for order', orderId, shipErr);
+          console.error('[Webhook] Sendbox booking failed for order', orderId, shipErr);
         }
       } else {
         // No rate ID — send basic confirmation without tracking

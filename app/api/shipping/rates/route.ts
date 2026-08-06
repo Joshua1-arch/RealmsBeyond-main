@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
-import { getShippingRates } from '@/lib/shipbubble';
+import { getShippingRates } from '@/lib/sendbox';
 
 /**
  * POST /api/shipping/rates
- * Body: { destination: ShipbubbleAddress, items: CartItem[] }
- * Returns: array of courier rate options
+ * Body: { destination: SendboxAddress, items: CartItem[] }
+ * Returns: array of courier rate options from Sendbox
  */
 export async function POST(request: NextRequest) {
   try {
@@ -25,38 +25,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No items provided' }, { status: 400 });
     }
 
-    try {
-      const rates = await getShippingRates(destination, items);
-      if (rates && rates.length > 0) {
-        return NextResponse.json({ rates });
-      }
-    } catch (sbError: any) {
-      console.warn('[Shipping Rates API] Shipbubble live fetch failed, using fallback standard rate:', sbError.message);
+    const rates = await getShippingRates(destination, items);
+
+    if (!rates || rates.length === 0) {
+      return NextResponse.json({ error: 'No shipping rates available for this address. Please check your address and try again.' }, { status: 422 });
     }
 
-    // Fallback standard rates if Shipbubble API returns empty or sandbox error
-    const fallbackRates = [
-      {
-        id: 'standard_delivery',
-        courier: 'Standard Courier (Door Delivery)',
-        courier_logo: '',
-        service_type: 'Door Delivery',
-        estimated_days: 3,
-        amount: 2500,
-        currency: 'NGN',
-      },
-      {
-        id: 'express_delivery',
-        courier: 'Express Courier (Priority)',
-        courier_logo: '',
-        service_type: 'Express Delivery',
-        estimated_days: 1,
-        amount: 4500,
-        currency: 'NGN',
-      },
-    ];
-
-    return NextResponse.json({ rates: fallbackRates });
+    return NextResponse.json({ rates });
   } catch (error: unknown) {
     console.error('[Shipping Rates API] Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch shipping rates';
