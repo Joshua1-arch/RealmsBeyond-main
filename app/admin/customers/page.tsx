@@ -4,7 +4,7 @@ import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 import { MdErrorOutline, MdCheckCircle } from 'react-icons/md';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { useDebounce } from "@/hooks/useDebounce";
-import { FiSearch, FiUser, FiCalendar, FiPhone, FiFilter, FiEye, FiX, FiCheck, FiXCircle } from 'react-icons/fi';
+import { FiSearch, FiUser, FiCalendar, FiPhone, FiAlertTriangle, FiEye, FiX, FiCheck, FiXCircle, FiTrash2 } from 'react-icons/fi';
 import { Button } from '@/components/ui/Button';
 import { UserDetailModal } from '@/components/admin/UserDetailModal';
 
@@ -29,6 +29,8 @@ export default function UsersPage() {
   const debouncedSearch = useDebounce(search, 500);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  /** ID of the user pending deletion — drives the inline confirm dialog */
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
 
 
   // Fetch users from API
@@ -55,17 +57,23 @@ export default function UsersPage() {
     fetchUsers();
   }, []);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
+  /** Opens the styled inline confirm dialog — no browser confirm() */
+  const handleDelete = (id: string) => {
+    setConfirmTarget(id);
+  };
+
+  /** Called when the user clicks "Confirm Delete" inside the inline dialog */
+  const confirmDelete = async () => {
+    if (!confirmTarget) return;
+    const id = confirmTarget;
+    setConfirmTarget(null);
 
     try {
       setActionLoading(id);
       setError(null);
       setSuccess(null);
 
-      const response = await fetch(`/api/users/${id}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(`/api/users/${id}`, { method: 'DELETE' });
 
       if (!response.ok) {
         const data = await response.json();
@@ -83,6 +91,7 @@ export default function UsersPage() {
       setActionLoading(null);
     }
   };
+
 
   const handleRoleChange = async (id: string, newRole: string) => {
     try {
@@ -273,11 +282,65 @@ export default function UsersPage() {
         </div>
       </main >
 
+      {/* ── Inline Delete Confirmation Dialog ───────────────────────── */}
+      {confirmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setConfirmTarget(null)}
+          />
+
+          {/* Card */}
+          <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+            {/* Red top accent bar */}
+            <div className="h-1 w-full bg-red-500" />
+
+            <div className="p-6">
+              {/* Icon + heading */}
+              <div className="flex items-start gap-4 mb-4">
+                <div className="flex-shrink-0 w-11 h-11 rounded-full bg-red-50 border border-red-100 flex items-center justify-center">
+                  <FiAlertTriangle className="w-5 h-5 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="font-heading text-lg font-semibold text-gray-900 leading-tight">
+                    Delete User
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Are you sure you want to delete this user? This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-100 my-4" />
+
+              {/* Actions */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setConfirmTarget(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 shadow-sm"
+                >
+                  <FiTrash2 className="w-4 h-4" />
+                  Confirm Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <UserDetailModal
         user={selectedUser}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       />
-    </div >
+    </div>
   );
 }

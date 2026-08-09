@@ -154,24 +154,30 @@ export class ShipbubbleService {
     receiverAddressCode: number,
     items: Array<{ name: string; quantity: number; weight?: number; price?: number }>
   ) {
-    return {
-      sender_address_code: senderAddressCode,
+    const package_items = items.map(item => {
+      const weight = Number(item.weight);
+      const amount = Number(item.price);
+      return {
+        name:        (item.name || 'Item').trim(),
+        description: (item.name || 'Item').trim(),
+        quantity:    Number(item.quantity) || 1,
+        unit_amount: Number.isFinite(amount) && amount > 0 ? amount : 2000,
+        unit_weight: Number.isFinite(weight) && weight > 0 ? weight : 0.5,
+      };
+    });
+
+    const payload = {
+      sender_address_code:   senderAddressCode,
       reciever_address_code: receiverAddressCode,
-      pickup_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-      category_id: 74794423, // Fashion wears / general merchandise
-      package_items: items.map(item => ({
-        name: item.name,
-        description: item.name,
-        quantity: item.quantity,
-        unit_amount: item.price ?? 2000,
-        unit_weight: item.weight || 0.5,
-      })),
-      package_dimension: {
-        length: 10,
-        width: 10,
-        height: 10,
-      },
+      pickup_date:           new Date(Date.now() + 86400000).toISOString().split('T')[0],
+      category_id:           74794423, // Fashion wears / general merchandise
+      package_items,
+      package_dimension: { length: 10, width: 10, height: 10 },
     };
+
+    // Temporary: log the exact payload sent to Shipbubble — remove after confirming fix
+    console.log('[Shipbubble] buildRatesPayload items:', JSON.stringify(package_items));
+    return payload;
   }
 
   /**
