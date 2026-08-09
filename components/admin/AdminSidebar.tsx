@@ -35,7 +35,7 @@ export function AdminSidebar() {
     const { settings } = useSiteSettings();
 
     return (
-        <div className="hidden lg:flex flex-col w-72 bg-white border-r border-gray-200 h-screen sticky top-0 shadow-lg">
+        <div className="flex flex-col w-full h-full bg-white border-r border-gray-200 overflow-y-auto shadow-lg">
             <div className="p-8 border-b border-gray-200">
                 <Link href="/" className="flex items-center gap-4">
                     <img

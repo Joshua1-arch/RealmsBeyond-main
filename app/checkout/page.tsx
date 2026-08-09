@@ -437,9 +437,11 @@ export default function CheckoutPage() {
                               : 'border-gray-200 hover:border-gray-300 bg-white'
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            {/* Radio + courier name */}
-                            <div className="flex items-start gap-3">
+                          {/* ── Mobile: stacked layout ── Desktop: side-by-side ── */}
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+
+                            {/* Left: radio + courier info */}
+                            <div className="flex items-start gap-3 min-w-0">
                               <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 ${
                                 selectedRate?.id === rate.id ? 'border-rare-primary bg-rare-primary' : 'border-gray-300'
                               }`}>
@@ -447,14 +449,13 @@ export default function CheckoutPage() {
                                   <div className="w-2 h-2 bg-white rounded-full m-auto mt-0.5" />
                                 )}
                               </div>
-                              <div>
-                                <p className="font-semibold text-rare-text">{rate.courier}</p>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-rare-text truncate">{rate.courier}</p>
                                 <p className="text-sm text-rare-text-light capitalize">{rate.service_type}</p>
 
-                                {/* Rating row — only shown for Shipbubble couriers */}
+                                {/* Rating row */}
                                 {rate.rating && (
-                                  <div className="flex items-center gap-2 mt-1.5">
-                                    {/* Score dots: 5 dots, filled proportionally */}
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
                                     <div className="flex items-center gap-0.5">
                                       {[1, 2, 3, 4, 5].map(dot => (
                                         <span
@@ -489,16 +490,17 @@ export default function CheckoutPage() {
                               </div>
                             </div>
 
-                            {/* Price + ETA */}
-                            <div className="text-right flex-shrink-0">
+                            {/* Right: price + ETA — full-width row on mobile, right-aligned on desktop */}
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start flex-shrink-0 pl-8 sm:pl-0">
                               <p className="font-bold text-rare-primary text-lg">
                                 &#8358;{rate.amount.toLocaleString()}
                               </p>
-                              <p className="text-xs text-rare-text-light flex items-center gap-1 justify-end">
+                              <p className="text-xs text-rare-text-light flex items-center gap-1">
                                 <FiClock className="w-3 h-3" />
                                 {rate.estimated_days} day{rate.estimated_days !== 1 ? 's' : ''}
                               </p>
                             </div>
+
                           </div>
                         </button>
                       ))}
