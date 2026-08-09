@@ -29,6 +29,13 @@ export interface RequestRatesResponse {
 }
 
 export class ShipbubbleService {
+  /**
+   * Module-level in-process cache for the sender address code.
+   * Starts as null; populated on first successful validation.
+   * Cleared automatically if Shipbubble rejects it, triggering re-validation.
+   */
+  private static cachedSenderCode: number | null = null;
+
   private static getHeaders() {
     const apiKey = process.env.SHIPBUBBLE_API_KEY;
     if (!apiKey) {
@@ -93,33 +100,54 @@ export class ShipbubbleService {
   }
 
   /**
-   * Helper to get sender address code.
+   * Returns the sender address code, preferring the in-process cache.
+   * Falls back to the SHIPBUBBLE_SENDER_ADDRESS_CODE env var, then performs
+   * a live address validation as a last resort. The resolved value is cached
+   * for the lifetime of the server process.
    */
   private static async getSenderAddressCode(): Promise<number> {
-    const senderIdEnv = process.env.SHIPBUBBLE_SENDER_ADDRESS_ID || process.env.SHIPBUBBLE_SENDER_ADDRESS_CODE;
-    if (senderIdEnv && /^\d+$/.test(senderIdEnv.trim())) {
-      return parseInt(senderIdEnv.trim(), 10);
+    // 1. In-process cache (fastest path — avoids any network call on repeat requests)
+    if (this.cachedSenderCode !== null) {
+      return this.cachedSenderCode;
     }
 
-    console.warn(
-      "SHIPBUBBLE_SENDER_ADDRESS_ID is not configured. Validating store address..."
-    );
+    // 2. Env var (useful for first cold-start without prior validation)
+    const envCode = process.env.SHIPBUBBLE_SENDER_ADDRESS_ID || process.env.SHIPBUBBLE_SENDER_ADDRESS_CODE;
+    if (envCode && /^\d+$/.test(envCode.trim())) {
+      this.cachedSenderCode = parseInt(envCode.trim(), 10);
+      return this.cachedSenderCode;
+    }
 
+    // 3. Live validation as final fallback
+    return this.freshValidateSenderAddress();
+  }
+
+  /**
+   * Always performs a live Shipbubble address validation for the store address
+   * and updates the in-process cache. Called automatically when the cached/env
+   * code is rejected by the API.
+   */
+  private static async freshValidateSenderAddress(): Promise<number> {
+    console.warn('[Shipbubble] Re-validating store sender address (cache miss or stale code)...');
     const code = await this.validateAddress({
-      name: process.env.STORE_NAME || "Beyond Realms Store",
-      email: process.env.BREVO_SENDER_EMAIL || "support@beyondrealmsltd.com",
-      phone: process.env.STORE_PHONE || "08030000000",
-      address: process.env.STORE_ADDRESS || "Nos 8, Ademola Babalola idi-Igbabo",
-      city: process.env.STORE_CITY || "Ogbomoso",
-      state: process.env.STORE_STATE || "Oyo",
-      country: "Nigeria",
+      name:    process.env.STORE_NAME    || 'Beyond Realms Store',
+      email:   process.env.BREVO_SENDER_EMAIL || 'support@beyondrealmsltd.com',
+      phone:   process.env.STORE_PHONE   || '08030000000',
+      address: `${process.env.STORE_ADDRESS || 'Nos 8, Ademola Babalola idi-Igbabo'}, ${process.env.STORE_CITY || 'Ibadan'}, ${process.env.STORE_STATE || 'Oyo'}, Nigeria`,
+      city:    process.env.STORE_CITY    || 'Ibadan',
+      state:   process.env.STORE_STATE   || 'Oyo',
+      country: 'Nigeria',
     });
 
     if (!code) {
-      throw new Error("Failed to validate store sender address. Check Shipbubble credentials and connectivity.");
+      throw new Error('Failed to validate store sender address with Shipbubble. Check API key and store address.');
     }
+
+    this.cachedSenderCode = code;
+    console.log(`[Shipbubble] Sender address re-validated. New code: ${code}`);
     return code;
   }
+
 
   private static buildRatesPayload(
     senderAddressCode: number,
@@ -148,68 +176,93 @@ export class ShipbubbleService {
 
   /**
    * Fetches real-time shipping rates from Shipbubble courier partners.
+   * Automatically self-heals if the cached sender address code is stale:
+   * it re-validates the store address and retries the fetch exactly once.
    */
   static async getShippingRates(
     deliveryAddress: AddressInput,
     items: Array<{ name: string; quantity: number; weight?: number; price?: number }>
   ): Promise<RequestRatesResponse> {
     try {
-      const baseUrl = this.getBaseUrl();
-      const senderAddressCode = await this.getSenderAddressCode();
-      const receiverAddressCode = await this.validateAddress(deliveryAddress);
-
-      if (!receiverAddressCode) {
-        return {
-          success: false,
-          rates: [],
-          message: "Could not validate delivery address. Please ensure street, city, state, and country are correct.",
-        };
-      }
-
-      const payload = this.buildRatesPayload(senderAddressCode, receiverAddressCode, items);
-
-      const response = await fetch(`${baseUrl}/shipping/fetch_rates`, {
-        method: "POST",
-        headers: this.getHeaders(),
-        body: JSON.stringify(payload),
-      });
-
-      const json = await response.json();
-      console.log("[Shipbubble Rates Response]:", JSON.stringify(json));
-
-      if (json.status !== "success" || !json.data || !json.data.couriers) {
-        return {
-          success: false,
-          rates: [],
-          message: json.message || "Failed to fetch rates from Shipbubble",
-        };
-      }
-
-      const rates: ShipbubbleRate[] = json.data.couriers.map((courier: any) => ({
-        courier_id: String(courier.courier_id || courier.service_code),
-        courier_name: courier.courier_name,
-        courier_image: courier.courier_image,
-        total_shipping_fee: Number(courier.total || courier.rate_card_amount || 0),
-        delivery_eta: courier.delivery_eta || "2-5 days",
-        shipping_option_id: String(courier.courier_id || courier.service_code),
-        ratings: typeof courier.ratings === 'number' ? courier.ratings : undefined,
-        votes: typeof courier.votes === 'number' ? courier.votes : undefined,
-        trackingLabel: courier.tracking?.label || undefined,
-      }));
-
-      return {
-        success: true,
-        rates,
-      };
+      return await this._fetchRates(deliveryAddress, items);
     } catch (error: any) {
-      console.error("Error getting Shipbubble rates:", error);
+      console.error('[Shipbubble] getShippingRates error:', error);
       return {
         success: false,
         rates: [],
-        message: error.message || "An unexpected error occurred while fetching shipping rates",
+        message: error.message || 'An unexpected error occurred while fetching shipping rates',
       };
     }
   }
+
+  /** Internal: performs the actual rates fetch, with one automatic retry on stale sender code. */
+  private static async _fetchRates(
+    deliveryAddress: AddressInput,
+    items: Array<{ name: string; quantity: number; weight?: number; price?: number }>,
+    isRetry = false
+  ): Promise<RequestRatesResponse> {
+    const baseUrl = this.getBaseUrl();
+    const senderAddressCode = await this.getSenderAddressCode();
+    const receiverAddressCode = await this.validateAddress(deliveryAddress);
+
+    if (!receiverAddressCode) {
+      return {
+        success: false,
+        rates: [],
+        message: 'Could not validate delivery address. Please ensure street, city, state, and country are correct.',
+      };
+    }
+
+    const payload = this.buildRatesPayload(senderAddressCode, receiverAddressCode, items);
+
+    const response = await fetch(`${baseUrl}/shipping/fetch_rates`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    const json = await response.json();
+    console.log('[Shipbubble Rates Response]:', JSON.stringify(json));
+
+    // ── Self-healing: stale sender address code ──────────────────────────────
+    // Shipbubble returns status "failed" with this exact message when the
+    // sender_address_code is expired or unrecognised. Bust the cache,
+    // re-validate live, and retry — but only once to avoid infinite loops.
+    const isStaleCode =
+      json.status === 'failed' &&
+      typeof json.message === 'string' &&
+      json.message.toLowerCase().includes('invalid sender address code');
+
+    if (isStaleCode && !isRetry) {
+      console.warn('[Shipbubble] Sender address code rejected — busting cache and retrying...');
+      this.cachedSenderCode = null;           // clear stale cache
+      await this.freshValidateSenderAddress(); // re-validate and re-populate cache
+      return this._fetchRates(deliveryAddress, items, true); // retry once
+    }
+
+    if (json.status !== 'success' || !json.data || !json.data.couriers) {
+      return {
+        success: false,
+        rates: [],
+        message: json.message || 'Failed to fetch rates from Shipbubble',
+      };
+    }
+
+    const rates: ShipbubbleRate[] = json.data.couriers.map((courier: any) => ({
+      courier_id:         String(courier.courier_id || courier.service_code),
+      courier_name:       courier.courier_name,
+      courier_image:      courier.courier_image,
+      total_shipping_fee: Number(courier.total || courier.rate_card_amount || 0),
+      delivery_eta:       courier.delivery_eta || '2-5 days',
+      shipping_option_id: String(courier.courier_id || courier.service_code),
+      ratings:            typeof courier.ratings === 'number' ? courier.ratings : undefined,
+      votes:              typeof courier.votes   === 'number' ? courier.votes   : undefined,
+      trackingLabel:      courier.tracking?.label || undefined,
+    }));
+
+    return { success: true, rates };
+  }
+
 
   /**
    * Books a shipment / creates an order in Shipbubble.

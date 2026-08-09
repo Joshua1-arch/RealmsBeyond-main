@@ -20,12 +20,18 @@ import { NIGERIAN_STATES } from '@/lib/shipping';
 
 interface ShippingRate {
   id: string;
+  provider?: string;
   courier: string;
   courier_logo?: string;
   service_type: string;
   estimated_days: number;
   amount: number;
   currency: string;
+  rating?: {
+    score: number;   // e.g. 4.3
+    votes: number;   // e.g. 503
+    trackingLabel: string; // e.g. "Good", "Excellent"
+  };
 }
 
 export default function CheckoutPage() {
@@ -414,9 +420,10 @@ export default function CheckoutPage() {
                               : 'border-gray-200 hover:border-gray-300 bg-white'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 ${
+                          <div className="flex items-start justify-between gap-3">
+                            {/* Radio + courier name */}
+                            <div className="flex items-start gap-3">
+                              <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 ${
                                 selectedRate?.id === rate.id ? 'border-rare-primary bg-rare-primary' : 'border-gray-300'
                               }`}>
                                 {selectedRate?.id === rate.id && (
@@ -426,11 +433,49 @@ export default function CheckoutPage() {
                               <div>
                                 <p className="font-semibold text-rare-text">{rate.courier}</p>
                                 <p className="text-sm text-rare-text-light capitalize">{rate.service_type}</p>
+
+                                {/* Rating row — only shown for Shipbubble couriers */}
+                                {rate.rating && (
+                                  <div className="flex items-center gap-2 mt-1.5">
+                                    {/* Score dots: 5 dots, filled proportionally */}
+                                    <div className="flex items-center gap-0.5">
+                                      {[1, 2, 3, 4, 5].map(dot => (
+                                        <span
+                                          key={dot}
+                                          className={`inline-block w-2 h-2 rounded-full ${
+                                            dot <= Math.round(rate.rating!.score)
+                                              ? 'bg-rare-primary'
+                                              : 'bg-gray-200'
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                    <span className="text-xs font-semibold text-rare-primary">
+                                      {rate.rating.score.toFixed(1)}
+                                    </span>
+                                    <span className="text-xs text-rare-text-light">
+                                      ({rate.rating.votes.toLocaleString()} reviews)
+                                    </span>
+                                    <span
+                                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                        rate.rating.trackingLabel === 'Excellent'
+                                          ? 'bg-green-100 text-green-700'
+                                          : rate.rating.trackingLabel === 'Good'
+                                          ? 'bg-blue-50 text-blue-700'
+                                          : 'bg-gray-100 text-gray-600'
+                                      }`}
+                                    >
+                                      {rate.rating.trackingLabel}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             </div>
-                            <div className="text-right">
+
+                            {/* Price + ETA */}
+                            <div className="text-right flex-shrink-0">
                               <p className="font-bold text-rare-primary text-lg">
-                                ₦{rate.amount.toLocaleString()}
+                                &#8358;{rate.amount.toLocaleString()}
                               </p>
                               <p className="text-xs text-rare-text-light flex items-center gap-1 justify-end">
                                 <FiClock className="w-3 h-3" />
