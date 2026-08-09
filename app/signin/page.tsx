@@ -24,12 +24,15 @@ function SignInForm() {
   const [form, setForm] = useState({
     email: '',
     password: '',
-
     remember: false,
   });
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [resendMessage, setResendMessage] = useState('');
+
+  const reason = searchParams.get('reason');
+  const sessionExpired = reason === 'session_expired';
+
 
  
   useEffect(() => {
@@ -163,29 +166,37 @@ function SignInForm() {
 
               {/* Form */}
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Error Message */}
-                {error && (
-                  <div className="p-4 rounded-xl bg-red-50 text-red-700 text-sm border border-red-100">
-                    {error}
-                    {unverifiedEmail && (
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={handleResendVerification}
-                          className="text-red-800 underline hover:text-red-900 font-medium"
-                          disabled={resendStatus === 'sending' || resendStatus === 'sent'}
-                        >
-                          {resendStatus === 'sending' ? 'Sending...' : resendStatus === 'sent' ? 'Email Sent!' : 'Resend Verification Email'}
-                        </button>
-                        {resendMessage && (
-                          <p className={`mt-1 text-xs ${resendStatus === 'error' ? 'text-red-700' : 'text-green-700'}`}>
-                            {resendMessage}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+              {/* Session-expired notice */}
+              {sessionExpired && (
+                <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                  <p className="font-semibold mb-0.5">Your session has expired</p>
+                  <p className="text-amber-700 font-normal">Please sign in again to continue where you left off.</p>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {error && (
+                <div className="p-4 rounded-xl bg-red-50 text-red-700 text-sm border border-red-100">
+                  {error}
+                  {unverifiedEmail && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={handleResendVerification}
+                        className="text-red-800 underline hover:text-red-900 font-medium"
+                        disabled={resendStatus === 'sending' || resendStatus === 'sent'}
+                      >
+                        {resendStatus === 'sending' ? 'Sending...' : resendStatus === 'sent' ? 'Email Sent!' : 'Resend Verification Email'}
+                      </button>
+                      {resendMessage && (
+                        <p className={`mt-1 text-xs ${resendStatus === 'error' ? 'text-red-700' : 'text-green-700'}`}>
+                          {resendMessage}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
                 {/* Email */}
                 <Input

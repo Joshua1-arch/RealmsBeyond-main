@@ -91,6 +91,7 @@ export default function CheckoutPage() {
     }
   }, [user]);
 
+
   const subtotal = getTotalPrice();
   const shippingCost = selectedRate?.amount ?? 0;
   const total = subtotal + shippingCost;
@@ -127,6 +128,13 @@ export default function CheckoutPage() {
         }),
       });
 
+      // Session expired — send the user back to sign-in and return here after
+      if (res.status === 401) {
+        router.push(`/signin?returnTo=${encodeURIComponent('/checkout')}&reason=session_expired`);
+        return;
+      }
+
+
       const data = await res.json();
 
       if (!res.ok) {
@@ -141,7 +149,8 @@ export default function CheckoutPage() {
     } finally {
       setRatesLoading(false);
     }
-  }, [shippingInfo, cartItems]);
+  }, [shippingInfo, cartItems, router]);
+
 
   // ─────────────────────────────────────────────
   // Step 3: place order + redirect to Paystack
@@ -166,6 +175,13 @@ export default function CheckoutPage() {
         }),
       });
 
+      // Session expired — send the user back to sign-in and return here after
+      if (res.status === 401) {
+        router.push(`/signin?returnTo=${encodeURIComponent('/checkout')}&reason=session_expired`);
+        return;
+      }
+
+
       const data = await res.json();
 
       if (!res.ok) {
@@ -186,6 +202,7 @@ export default function CheckoutPage() {
       setLoading(false);
     }
   };
+
 
   const stepLabels = [
     { num: 1, label: 'Shipping' },
